@@ -1,0 +1,3 @@
+[deps]
+CFHydrostatics = "0dc8c93d-0116-402a-b00b-85ddfe5501a2"
+Documenter = "e30172f5-a6a5-5a46-863b-614d45cd2de4"
