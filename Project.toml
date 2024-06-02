@@ -3,6 +3,17 @@ uuid = "0dc8c93d-0116-402a-b00b-85ddfe5501a2"
 authors = ["The ClimFlows contributors"]
 version = "1.0.0-DEV"
 
+[deps]
+CFDomains = "3699aaca-035b-4155-96ec-eecb526248de"
+ClimFluids = "68475963-a72f-47d4-b871-9c5545ecd1c0"
+MutatingOrNot = "6a37069a-9a67-4b2d-a34a-f09ab4b23c7c"
+
+[weakdeps]
+SHTnsSpheres = "9e5c175a-5132-4517-85a1-2957ec255f89"
+
+[extensions]
+SHTnsSpheres_Ext = ["SHTnsSpheres"]
+
 [compat]
 julia = "1.8"
 
