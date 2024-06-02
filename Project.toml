@@ -5,6 +5,7 @@ version = "1.0.0-DEV"
 
 [deps]
 CFDomains = "3699aaca-035b-4155-96ec-eecb526248de"
+CFPlanets = "9c2ca15e-caec-41c0-a22c-2e93fe5a241f"
 ClimFluids = "68475963-a72f-47d4-b871-9c5545ecd1c0"
 MutatingOrNot = "6a37069a-9a67-4b2d-a34a-f09ab4b23c7c"
 
