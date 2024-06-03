@@ -19,6 +19,7 @@ SHTnsSpheres = "9e5c175a-5132-4517-85a1-2957ec255f89"
 SHTnsSpheres_Ext = ["SHTnsSpheres"]
 
 [compat]
+ManagedLoops = "0.1"
 julia = "1.8"
 
 [extras]
