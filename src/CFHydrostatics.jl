@@ -1,11 +1,10 @@
 module CFHydrostatics
 
+using ManagedLoops: @loops, @vec
 using CFPlanets: ShallowTradPlanet
-using CFDomains: CFDomains
+using CFDomains: CFDomains, VHLayout, HVLayout
 using ClimFluids: AbstractFluid, SimpleFluid
 import CFTimeSchemes
-
-include("julia/vertical_coordinate.jl")
 
 struct HPE{F, Manager, Coord, Domain, Fluid, TwoDimScalar}
     mgr::Manager
@@ -46,5 +45,7 @@ function HPE_diagnostics end
 function HPE_tendencies! end
 function HPE_scratch end
 function HPE_dstate end
+
+include("julia/remap.jl")
 
 end
