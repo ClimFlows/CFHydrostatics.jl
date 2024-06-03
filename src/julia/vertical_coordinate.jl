@@ -2,7 +2,7 @@
     abstract type VerticalCoordinate{N} end
 
 Parent type for generalized vertical coordinates ranging from `0` to `N`.
-See also [`PressureVerticalCoordinate`](@ref).
+See also [`PressureCoordinate`](@ref).
 """
 abstract type VerticalCoordinate{N} end
 
