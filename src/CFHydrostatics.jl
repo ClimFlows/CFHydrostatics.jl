@@ -2,7 +2,7 @@ module CFHydrostatics
 
 using ManagedLoops: @loops, @vec
 using CFPlanets: ShallowTradPlanet
-using CFDomains: CFDomains, VHLayout, HVLayout
+using CFDomains: CFDomains, VHLayout, HVLayout, Shell
 using ClimFluids: AbstractFluid, SimpleFluid
 import CFTimeSchemes
 
