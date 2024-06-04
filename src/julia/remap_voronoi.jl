@@ -1,6 +1,8 @@
-#=============================== Vertical remap ===========================#
+module RemapVoronoi
 
-function vertical_remap_LHPE!(backend, (mass, ucov), model, domain::Shell, (phi, B, U, qv, qe), (fluxq, flux_e, fluxu))
+using ManagedLoops: @loops, @vec
+
+function vertical_remap_LHPE!(backend, (mass, ucov), model, domain, (phi, B, U, qv, qe), (fluxq, flux_e, fluxu))
     # check vertical sizes
     @assert size(mass,1) == size(ucov,1)  "Size mismatch"
     @assert size(phi,1) == size(mass,1)+1 "Size mismatch"
@@ -88,3 +90,5 @@ end
         end
     end
 end
+
+end # module

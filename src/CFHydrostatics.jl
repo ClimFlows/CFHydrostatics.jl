@@ -2,7 +2,7 @@ module CFHydrostatics
 
 using ManagedLoops: @loops, @vec
 using CFPlanets: ShallowTradPlanet
-using CFDomains: CFDomains, VHLayout, HVLayout, Shell
+using CFDomains: CFDomains, VHLayout, HVLayout, Shell, pressure_level
 using ClimFluids: AbstractFluid, SimpleFluid
 import CFTimeSchemes
 
@@ -45,7 +45,13 @@ function HPE_diagnostics end
 function HPE_tendencies! end
 function HPE_scratch end
 function HPE_dstate end
+function HPE_remap! end
 
-include("julia/remap.jl")
+vertical_remap!(backend, model, new, scratch, now) =
+    HPE_remap!(backend, model, model.domain.layer, new, scratch, now)
+
+include("julia/remap_HPE.jl")
+include("julia/remap_collocated.jl")
+# include("julia/remap_voronoi.jl")
 
 end

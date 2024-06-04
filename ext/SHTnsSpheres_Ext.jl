@@ -5,7 +5,9 @@ using SHTnsSpheres: SHTnsSphere, analysis_scalar!, analysis_vector!
 using CFPlanets: ShallowTradPlanet, coriolis
 using CFDomains: shell
 using CFHydrostatics: CFHydrostatics
-import CFHydrostatics: HPE, initial_HPE_HV, HPE_diagnostics, HPE_dstate, HPE_scratch, HPE_tendencies!
+using CFHydrostatics.RemapCollocated: remap!
+
+import CFHydrostatics: HPE, initial_HPE_HV, HPE_diagnostics, HPE_dstate, HPE_scratch, HPE_tendencies!, HPE_remap!
 
 function HPE(params, mgr, sph::SHTnsSphere, vcoord, geopotential, gas)
     (; radius, Omega), (; lon, lat) = params, sph
@@ -41,6 +43,9 @@ function HPE_dstate(_, ::SHTnsSphere, state)
 end
 
 include("diagnostics.jl")
+
+HPE_remap!(mgr, model, ::SHTnsSphere, new, #==# scratch, #==# now) =
+    remap!(mgr, model.vcoord, model.domain.layout, new, #==# scratch, #==# now)
 
 HPE_diagnostics(_, ::SHTnsSphere) = Diagnostics.diagnostics()
 
