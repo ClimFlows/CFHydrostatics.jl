@@ -109,24 +109,33 @@ function tendencies_all(dstate, model, state, scratch, t)
 end
 
 hydrostatic_pressure!(::Void, model, mass) = hydrostatic_pressure!(similar(@view mass[:,:,:,1]), model, mass)
+function hydrostatic_pressure!(p::Array{Float64,3}, model, mass::Array{Float64,4})
+    @assert size(mass,3) == size(p,3)
+    compute_hydrostatic_pressure(model.mgr, p, model, mass)
+    return p
+end
+
+@loops function compute_hydrostatic_pressure(_, p, model, mass)
+    let (irange, jrange) = (axes(p,1), axes(p,2))
+        radius, ptop, nz = model.planet.radius, model.vcoord.ptop, size(p,3)
+        half_invrad2 = radius^-2 /2
+        for j in jrange
+            @vec for i in irange
+                p[i,j,nz] = ptop + half_invrad2*mass[i,j,nz,1]
+            end
+        end
+        for j in jrange, k in nz:-1:2
+            @vec for i in irange
+                p[i,j,k-1] = p[i,j,k] + half_invrad2*(mass[i,j,k,1]+mass[i,j,k-1,1])
+            end
+        end
+    end
+end
 
 function Bernoulli!(::Void, ::Void, ::Void, ::Void, model, mass::Array{Float64,4}, p::Array{Float64,3}, uv)
     B() = similar(p)
     Phi = similar(@view p[:,:,1])
     return Bernoulli!(B(), B(), B(), Phi, model, mass, p, uv)
-end
-
-function hydrostatic_pressure!(p::Array{Float64,3}, model, mass::Array{Float64,4})
-    @assert size(mass,3) == size(p,3)
-    radius, ptop, nz = model.planet.radius, model.vcoord.ptop, size(p,3)
-    half_invrad2 = radius^-2 /2
-    for i in axes(p,1), j in axes(p,2)
-        p[i,j,nz] = ptop + half_invrad2*mass[i,j,nz,1]
-    end
-    for i in axes(p,1), j in axes(p,2), k in nz:-1:2
-        p[i,j,k-1] = p[i,j,k] + half_invrad2*(mass[i,j,k,1]+mass[i,j,k-1,1])
-    end
-    return p
 end
 
 function Bernoulli!(B, exner, consvar, Phi, model, mass::Array{Float64,4}, p::Array{Float64,3}, uv)
