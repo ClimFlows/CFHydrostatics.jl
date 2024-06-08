@@ -39,6 +39,9 @@ CFTimeSchemes.scratch_space(model::HPE, state) = HPE_scratch(model, model.domain
 
 CFTimeSchemes.model_dstate(model::HPE, state) = HPE_dstate(model, model.domain.layer, state)
 
+vertical_remap!(backend, model, new, scratch, now) =
+    HPE_remap!(backend, model, model.domain.layer, new, scratch, now)
+
 # implemented in SHTnsSpheres_Ext
 function HPE end
 function HPE_diagnostics end
@@ -47,11 +50,13 @@ function HPE_scratch end
 function HPE_dstate end
 function HPE_remap! end
 
-vertical_remap!(backend, model, new, scratch, now) =
-    HPE_remap!(backend, model, model.domain.layer, new, scratch, now)
-
 include("julia/remap_HPE.jl")
 include("julia/remap_collocated.jl")
 # include("julia/remap_voronoi.jl")
+
+using PackageExtensionCompat
+function __init__()
+    @require_extensions
+end
 
 end

@@ -1,7 +1,7 @@
 name = "CFHydrostatics"
 uuid = "0dc8c93d-0116-402a-b00b-85ddfe5501a2"
 authors = ["The ClimFlows contributors"]
-version = "0.2.1DEV"
+version = "0.2.1"
 
 [deps]
 CFDomains = "3699aaca-035b-4155-96ec-eecb526248de"
@@ -12,22 +12,23 @@ ClimFluids = "68475963-a72f-47d4-b871-9c5545ecd1c0"
 CookBooks = "7bce7c31-0f61-4fd7-bdaf-6b04abfa2cc7"
 ManagedLoops = "36a4119d-6b73-4371-88fe-ba2d91f5495d"
 MutatingOrNot = "6a37069a-9a67-4b2d-a34a-f09ab4b23c7c"
-
-[weakdeps]
-SHTnsSpheres = "9e5c175a-5132-4517-85a1-2957ec255f89"
-
-[extensions]
-SHTnsSpheres_Ext = ["SHTnsSpheres"]
+PackageExtensionCompat = "65ce6f38-6b18-4e1d-a461-8949797d7930"
 
 [compat]
-CFDomains = "0.1.3"
+CFDomains = "0.1.6"
 CFTransport = "0.1.1"
 ClimFluids = "0.1.1"
 ManagedLoops = "0.1"
 julia = "1.8"
+
+[extensions]
+SHTnsSpheres_Ext = ["SHTnsSpheres"]
 
 [extras]
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [targets]
 test = ["Test"]
+
+[weakdeps]
+SHTnsSpheres = "9e5c175a-5132-4517-85a1-2957ec255f89"

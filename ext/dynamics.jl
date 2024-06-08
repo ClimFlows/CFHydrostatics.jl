@@ -122,11 +122,9 @@ end
         for j in jrange
             @vec for i in irange
                 p[i,j,nz] = ptop + half_invrad2*mass[i,j,nz,1]
-            end
-        end
-        for j in jrange, k in nz:-1:2
-            @vec for i in irange
-                p[i,j,k-1] = p[i,j,k] + half_invrad2*(mass[i,j,k,1]+mass[i,j,k-1,1])
+                for k in nz:-1:2
+                    p[i,j,k-1] = p[i,j,k] + half_invrad2*(mass[i,j,k,1]+mass[i,j,k-1,1])
+                end
             end
         end
     end
@@ -151,16 +149,18 @@ end
         ux, uy = uv.ucolat, uv.ulon
         invrad2 = model.planet.radius^-2
         Exner = model.gas(:p, :consvar).exner_functions
-        @inbounds for j in jrange, k in axes(p,3)
-            @vec for i in irange
-                ke = (invrad2/2)*(ux[i,j,k]^2 + uy[i,j,k]^2)
-                consvar_ijk = mass[i,j,k,2]/mass[i,j,k,1]
-                h, v, exner_ijk = Exner(p[i,j,k], consvar_ijk)
-                Phi_up = Phi[i,j] + invrad2*mass[i,j,k,1]*v # geopotential at upper interface
-                B[i,j,k] = ke + (Phi_up+Phi[i,j])/2 + (h-consvar_ijk*exner_ijk)
-                consvar[i,j,k] = consvar_ijk
-                exner[i,j,k] = exner_ijk
-                Phi[i,j] = Phi_up
+        @inbounds for j in jrange
+            for k in axes(p,3)
+                @vec for i in irange
+                    ke = (invrad2/2)*(ux[i,j,k]^2 + uy[i,j,k]^2)
+                    consvar_ijk = mass[i,j,k,2]/mass[i,j,k,1]
+                    h, v, exner_ijk = Exner(p[i,j,k], consvar_ijk)
+                    Phi_up = Phi[i,j] + invrad2*mass[i,j,k,1]*v # geopotential at upper interface
+                    B[i,j,k] = ke + (Phi_up+Phi[i,j])/2 + (h-consvar_ijk*exner_ijk)
+                    consvar[i,j,k] = consvar_ijk
+                    exner[i,j,k] = exner_ijk
+                    Phi[i,j] = Phi_up
+                end
             end
         end
     end
