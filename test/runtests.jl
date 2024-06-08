@@ -9,9 +9,13 @@ using CFHydrostatics: CFHydrostatics, HPE, diagnostics
 using ThreadPinning
 using Test
 
-const Ext = Base.get_extension(CFHydrostatics, :SHTnsSpheres_Ext)
-const hydrostatic_pressure! = Ext.Dynamics.hydrostatic_pressure!
-const Bernoulli! = Ext.Dynamics.Bernoulli!
+if CFHydrostatics.PackageExtensionCompat.HAS_NATIVE_EXTENSIONS
+    const Ext = Base.get_extension(CFHydrostatics, :SHTnsSpheres_Ext)
+    const hydrostatic_pressure! = Ext.Dynamics.hydrostatic_pressure!
+    const Bernoulli! = Ext.Dynamics.Bernoulli!
+else
+    using CFHydrostatics.SHTnsSpheres_Ext.Dynamics: hydrostatic_pressure!, Bernoulli!
+end
 
 function setup(choices, params, sph; hd_n = 8, hd_nu = 1e-2, mgr = MultiThread(VectorizedCPU()))
     case = testcase(choices.TestCase, Float64)
@@ -82,7 +86,7 @@ function scaling_Bernouilli(choices)
         end
     end
 end
-    
+
 choices() = (
     Fluid = IdealPerfectGas,
     consvar = :temperature,
@@ -133,5 +137,5 @@ exit()
 end
 
 @testset "CFHydrostatics.jl" begin
-    simd = VectorizedCPU()    
+    simd = VectorizedCPU()
 end
