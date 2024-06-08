@@ -122,11 +122,9 @@ end
         for j in jrange
             @vec for i in irange
                 p[i,j,nz] = ptop + half_invrad2*mass[i,j,nz,1]
-            end
-        end
-        for j in jrange, k in nz:-1:2
-            @vec for i in irange
-                p[i,j,k-1] = p[i,j,k] + half_invrad2*(mass[i,j,k,1]+mass[i,j,k-1,1])
+                for k in nz:-1:2
+                    p[i,j,k-1] = p[i,j,k] + half_invrad2*(mass[i,j,k,1]+mass[i,j,k-1,1])
+                end
             end
         end
     end
