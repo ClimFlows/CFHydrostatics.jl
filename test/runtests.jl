@@ -111,17 +111,18 @@ threadinfo()
 scaling_pressure(choices)
 
 @info "Initializing spherical harmonics..."
-@time sph = SHTnsSphere(choices.nlat)
+@time sph = SHTnsSphere(choices().nlat)
 @info sph
 
 @info "Model setup..."
 
-params = map(Float64, params)
-params = (Uplanet = params.radius * params.Omega, params...)
-@time model, state0, diags = setup(choices, params, sph)
+let params = map(Float64, params())
+    params = (Uplanet = params.radius * params.Omega, params...)
+    @time model, state0, diags = setup(choices(), params, sph)
 
-display(methods(typeof(model)))
-        
+    display(methods(typeof(model)))
+end
+
 exit()
 
 @info "time for 100 scalar spectral transforms"
