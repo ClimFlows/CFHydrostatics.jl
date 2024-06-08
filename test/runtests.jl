@@ -11,6 +11,7 @@ using Test
 
 const Ext = Base.get_extension(CFHydrostatics, :SHTnsSpheres_Ext)
 const hydrostatic_pressure! = Ext.Dynamics.hydrostatic_pressure!
+const Bernoulli! = Ext.Dynamics.Bernoulli!
 
 function setup(choices, params, sph; hd_n = 8, hd_nu = 1e-2, mgr = MultiThread(VectorizedCPU()))
     case = testcase(choices.TestCase, Float64)
@@ -38,7 +39,7 @@ end
 function scaling(fun, name, simd, N::Int)
     @info "Multithread scaling for $name with $simd"
     @info "Threads \t elapsed \t speedup \t efficiency"
-    single = 1e9
+    single = 100f0
     for nt=1:Threads.nthreads()
         mgr = MultiThread(simd, nt)
         elapsed = time(N) do
@@ -47,14 +48,20 @@ function scaling(fun, name, simd, N::Int)
         nt==1 && (single = elapsed)
         speedup = single/elapsed
         percent(x) = round(100*x; digits=0)
-        @info "$nt \t\t $elapsed \t $(percent(speedup)) \t\t $(percent(speedup/nt))"
+        @info "$nt \t\t $(round(elapsed; digits=4)) \t $(percent(speedup)) \t\t $(percent(speedup/nt))"
     end
 end
 
+function model(mgr=PlainCPU())
+    ch, p = choices(), map(Float64, params())
+    gas = ch.Fluid(merge(ch, p))
+    (; mgr, gas, planet=(; radius=1.0), vcoord=(; ptop=1e3), Phis=0)
+end
+
 function scaling_pressure(choices)
-    model(mgr) = (; mgr, planet=(; radius=1.0), vcoord=(; ptop=1e3))
-    mass = randn(2*choices.nlat, choices.nlat, choices.nz, 2)
-    p = hydrostatic_pressure!(void, model(PlainCPU()), mass)
+    (; nlat, nz) = choices()
+    mass = randn(2nlat, nlat, nz, 2)
+    p = hydrostatic_pressure!(void, model(), mass)
     for vsize in (16,32)
         scaling("hydrostatic_pressure!", VectorizedCPU(vsize), 100) do mgr
             hydrostatic_pressure!(p, model(mgr), mass)
@@ -62,15 +69,30 @@ function scaling_pressure(choices)
     end
 end
 
-choices = (
+function scaling_Bernouilli(choices)
+    (; nlat, nz) = choices()
+    mass = ones(2nlat, nlat, nz, 2)
+    mass[:,:,:,2] = 300*mass[:,:,:,1] # theta=300K
+    p = 1e5*ones(2nlat, nlat, nz)
+    Phi = zeros(2nlat, nlat)
+    B, exner, consvar = Bernoulli(void, void, void, Phis, model(), mass, p)
+    for vsize in (16,32)
+        scaling("Bernoulli!", VectorizedCPU(vsize), 100) do mgr
+            Bernoulli!(B, exner, consvar, Phi, model(mgr), mass, p)
+        end
+    end
+end
+    
+choices() = (
     Fluid = IdealPerfectGas,
     consvar = :temperature,
     TestCase = Jablonowski06,
     Prec = Float64,
-    nz = max(30,4*Threads.nthreads()),
-    nlat = 128
+    nz = 30, # max(30,4*Threads.nthreads()),
+    nlat = 256
 )
-params = (
+
+params() = (
     ptop = 100,
     Cp = 1000,
     kappa = 2 / 7,
@@ -87,8 +109,6 @@ pinthreads(:cores)
 threadinfo()
 
 scaling_pressure(choices)
-
-exit()
 
 @info "Initializing spherical harmonics..."
 @time sph = SHTnsSphere(choices.nlat)
