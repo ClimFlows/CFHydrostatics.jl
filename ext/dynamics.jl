@@ -64,7 +64,7 @@ function tendencies_all(dstate, model, state, scratch, t)
     dmass_spec, duv_spec = dstate.mass_spec, dstate.uv_spec
     mgr, sph, invrad2, fcov = model.mgr, model.domain.layer, model.planet.radius^-2, model.fcov
     mgr_spec = no_simd(mgr) # complex broadcasting + SIMD not supported
-    
+
     # flux-form mass budget:
     #   ∂Φ/∂t = -∇(Φu, Φv)
     # uv is the momentum 1-form = a(u,v)
@@ -78,8 +78,8 @@ function tendencies_all(dstate, model, state, scratch, t)
         (@. mgr[flux.ulon] = -invrad2 * mass * uv.ulon),
     )
     flux_spec = analysis_vector!(flux_spec, flux, sph)
-    dmass_spec = @. mgr_spec[dmass_spec] = flux_spec.toroidal # FIXME divergence!(dmass_spec, flux_spec, sph)
-    
+    dmass_spec = divergence!(mgr_spec[dmass_spec], flux_spec, sph)
+
     # curl-form momentum budget:
     #   ∂u/∂t = (f+ζ)v - θ∂π/∂x- ∂B/∂x
     #   ∂v/∂t = -(f+ζ)u - θ∂π/∂y - ∂B/∂y
@@ -93,7 +93,7 @@ function tendencies_all(dstate, model, state, scratch, t)
     exner_spec = analysis_scalar!(exner_spec, exner, sph)
     grad_exner = synthesis_spheroidal!(grad_exner, exner_spec, sph)
 
-    zeta_spec = @. mgr_spec[zeta_spec] = exner_spec # FIXME curl!(zeta_spec, uv_spec, sph)
+    zeta_spec = curl!(mgr_spec[zeta_spec], uv_spec, sph)
     zeta = synthesis_scalar!(zeta, zeta_spec, sph)
     qflux = vector_spat(
         (@. mgr[qflux.ucolat] = invrad2 * (zeta + fcov) * uv.ulon - consvar * grad_exner.ucolat),
