@@ -1,7 +1,7 @@
 module Dynamics
 
 using MutatingOrNot: void, Void
-using ManagedLoops: @loops, @vec
+using ManagedLoops: @loops, @vec, no_simd
 using SHTnsSpheres: analysis_scalar!, synthesis_scalar!, analysis_vector!, synthesis_vector!,
     synthesis_spheroidal!, divergence!, curl!, shtns_alloc
 
@@ -62,7 +62,8 @@ function tendencies_all(dstate, model, state, scratch, t)
     (; mass, p, geopot, consvar, B, exner, B_spec, exner_spec, grad_exner) = scratch
     (; mass_spec, uv_spec) = state
     dmass_spec, duv_spec = dstate.mass_spec, dstate.uv_spec
-    sph, invrad2, fcov = model.domain.layer, model.planet.radius^-2, model.fcov
+    mgr, sph, invrad2, fcov = model.mgr, model.domain.layer, model.planet.radius^-2, model.fcov
+    mgr_spec = no_simd(mgr) # complex broadcasting + SIMD not supported
 
     # flux-form mass budget:
     #   ∂Φ/∂t = -∇(Φu, Φv)
@@ -73,11 +74,11 @@ function tendencies_all(dstate, model, state, scratch, t)
     mass = synthesis_scalar!(mass, mass_spec, sph)
     uv = synthesis_vector!(uv, uv_spec, sph)
     flux = vector_spat(
-        (@. flux.ucolat = -invrad2 * mass * uv.ucolat),
-        (@. flux.ulon = -invrad2 * mass * uv.ulon),
+        (@. mgr[flux.ucolat] = -invrad2 * mass * uv.ucolat),
+        (@. mgr[flux.ulon] = -invrad2 * mass * uv.ulon),
     )
     flux_spec = analysis_vector!(flux_spec, flux, sph)
-    dmass_spec = divergence!(dmass_spec, flux_spec, sph)
+    dmass_spec = divergence!(mgr_spec[dmass_spec], flux_spec, sph)
 
     # curl-form momentum budget:
     #   ∂u/∂t = (f+ζ)v - θ∂π/∂x- ∂B/∂x
@@ -92,20 +93,21 @@ function tendencies_all(dstate, model, state, scratch, t)
     exner_spec = analysis_scalar!(exner_spec, exner, sph)
     grad_exner = synthesis_spheroidal!(grad_exner, exner_spec, sph)
 
-    zeta_spec = curl!(zeta_spec, uv_spec, sph)
+    zeta_spec = curl!(mgr_spec[zeta_spec], uv_spec, sph)
     zeta = synthesis_scalar!(zeta, zeta_spec, sph)
     qflux = vector_spat(
-        (@. qflux.ucolat = invrad2 * (zeta + fcov) * uv.ulon - consvar * grad_exner.ucolat),
-        (@. qflux.ulon  = -invrad2 * (zeta + fcov) * uv.ucolat - consvar * grad_exner.ulon),
+        (@. mgr[qflux.ucolat] = invrad2 * (zeta + fcov) * uv.ulon - consvar * grad_exner.ucolat),
+        (@. mgr[qflux.ulon]  = -invrad2 * (zeta + fcov) * uv.ucolat - consvar * grad_exner.ulon),
     )
     qflux_spec = analysis_vector!(qflux_spec, qflux, sph)
 
     B_spec = analysis_scalar!(B_spec, B, sph)
     duv_spec = vector_spec(
-        (@. duv_spec.spheroidal = qflux_spec.spheroidal - B_spec),
-        (@. duv_spec.toroidal = qflux_spec.toroidal),
+        (@. mgr_spec[duv_spec.spheroidal] = qflux_spec.spheroidal - B_spec),
+        (@. mgr_spec[duv_spec.toroidal] = qflux_spec.toroidal),
     )
-    return (; dmass_spec, duv_spec, zeta, p, B, exner, consvar)
+    return (; dmass_spec, duv_spec, uv, flux, flux_spec, zeta, zeta_spec, qflux, qflux_spec,
+            mass, p, geopot, consvar, B, exner, B_spec, exner_spec, grad_exner)
 end
 
 hydrostatic_pressure!(::Void, model, mass) = hydrostatic_pressure!(similar(@view mass[:,:,:,1]), model, mass)
