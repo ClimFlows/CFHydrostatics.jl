@@ -54,6 +54,8 @@ include("julia/remap_HPE.jl")
 include("julia/remap_collocated.jl")
 # include("julia/remap_voronoi.jl")
 
+include("../ext/SHTnsSpheres_Ext.jl") # FIXME
+
 using PackageExtensionCompat
 function __init__()
     @require_extensions
