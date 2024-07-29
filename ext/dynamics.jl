@@ -119,8 +119,8 @@ end
 
 @loops function compute_hydrostatic_pressure(_, p, model, mass)
     let (irange, jrange) = (axes(p,1), axes(p,2))
-        radius, ptop, nz = model.planet.radius, model.vcoord.ptop, size(p,3)
-        half_invrad2 = radius^-2 /2
+        ptop, nz = model.vcoord.ptop, size(p,3)
+        half_invrad2 = model.planet.radius^-2 /2
         for j in jrange
             @vec for i in irange
                 p[i,j,nz] = ptop + half_invrad2*mass[i,j,nz,1]

@@ -23,12 +23,16 @@ diagnostics() = CookBook(;
     uv,
     surface_pressure,
     pressure,
-    gradmass,
-    ugradp,
-    Omega,
+    geopotential,
     conservative_variable,
     temperature,
     sound_speed,
+    gradmass,
+    ugradp,
+    ugradPhi,
+    Omega,
+    Omega2,
+    vertical_velocities,
 )
 
 dstate(model, state) = Dynamics.tendencies!(void, model, state, void, 0.0)
@@ -46,8 +50,6 @@ function uv(model, state)
 end
 
 duv(model, dstate) = uv(model, dstate)
-
-pressure(model, mass) = Dynamics.hydrostatic_pressure!(void, model, mass)
 
 function surface_pressure(model, state)
     radius = model.planet.radius
@@ -68,62 +70,69 @@ temperature(model, pressure, conservative_variable) =
 sound_speed(model, pressure, temperature) =
     model.gas(:p, :T).sound_speed.(pressure, temperature)
 
+function pressure(model, mass)
+    p = similar(mass[:, :, :, 1])
+    compute_pressure!(model.mgr, p, model, mass)
+    return p
+end
+
+function geopotential(model, mass, pressure)
+    Phi = similar(pressure, size(pressure) .+ (0, 0, 1))
+    compute_geopot!(nothing, Phi, model, mass, pressure)
+    return Phi
+end
+
 function ugradp(model, uv, gradmass)
     massx, massy = gradmass.ucolat, gradmass.ulon
     ux, uy = uv.ucolat, uv.ulon
     ugradp = similar(massx)
-    # ux, uy are physical velocities
-    # we must apply a factor 1/radius to convert them to contravariant (=angular) velocities
+    # apply factor 1/radius to physical velocities (ux,uy) to contravariant (=angular)
     compute_ugradp(model.mgr, ugradp, model, ux, uy, massx, massy, inv(model.planet.radius))
     return ugradp
 end
 
-gradmass(model, state) = synthesis_spheroidal!(void, state.mass_spec[:,:,1], model.domain.layer)
-
-@loops function compute_ugradp(_, ugradp, model, ux, uy, massx, massy, factor)
-    # the computation expects ux, uy as contravariant components and massx, massy as covariant gradient
-    # the scaling by radius^-2 turns the mass 2-form into a scalar (O-form)
-    let (irange, jrange) = (axes(ugradp, 1), axes(ugradp, 2))
-        radius, nz = model.planet.radius, size(ugradp, 3)
-        half_invrad2 = radius^-2 / 2
-        for j in jrange
-            @vec for i in irange
-                px = half_invrad2 * massx[i, j, nz]
-                py = half_invrad2 * massy[i, j, nz]
-                ugradp[i, j, nz] = factor*(ux[i, j, nz] * px + uy[i, j, nz] * py)
-                for k = nz:-1:2
-                    px += half_invrad2 * (massx[i, j, k] + massx[i, j, k-1])
-                    py += half_invrad2 * (massy[i, j, k] + massy[i, j, k-1])
-                    ugradp[i, j, k] = factor*(ux[i, j, k] * px + uy[i, j, k] * py)
-                end
-            end
-        end
-    end
+function ugradPhi(model, uv, geopotential)
+    ux, uy = uv
+    ugradPhi = similar(ux)
+    sph = model.domain.layer
+    Phi_spec = analysis_scalar!(void, geopotential, sph)
+    Phi_x, Phi_y = synthesis_spheroidal!(void, Phi_spec, sph)
+    # apply factor 1/radius to physical velocities (ux,uy) to contravariant (=angular)
+    compute_ugradPhi(model.mgr, ugradPhi, model, ux, uy, Phi_x, Phi_y, inv(model.planet.radius))
+    return ugradPhi
 end
 
+gradmass(model, state) =
+    synthesis_spheroidal!(void, state.mass_spec[:, :, 1], model.domain.layer)
+
 function Omega(model, dmass, ugradp)
-    dmass = dmass[:,:,:,1] # scalar, spatial
+    dmass = dmass[:, :, :, 1] # scalar, spatial
     Omega = similar(dmass)
     compute_Omega(model.mgr, Omega, model, dmass, ugradp)
     return Omega
 end
 
-function compute_Omega(_, Omega, model, dmass, ugradp)
-    # dmass is a scalar (O-form)
-    let (irange, jrange) = (axes(ugradp, 1), axes(ugradp, 2))
-        radius, nz = model.planet.radius, size(ugradp, 3)
-        for j in jrange
-            @vec for i in irange
-                dp = dmass[i, j, nz]/2
-                Omega[i, j, nz] = dp + ugradp[i, j, nz]
-                for k = nz:-1:2
-                    dp += (dmass[i, j, k] + dmass[i, j, k-1])/2
-                    Omega[i, j, k] = dp + ugradp[i, j, k]
-#                    Omega[i, j, k] = dp
-                end
-            end
-        end
-    end
+Omega2(vertical_velocities) = vertical_velocities[1]
+Phi_dot(vertical_velocities) = vertical_velocities[2]
+pressure_tendency(vertical_velocities) = vertical_velocities[3]
+
+function vertical_velocities(model, mass, dmass, ugradp, ugradPhi, pressure)
+    Omega, dp, Phi_dot = (similar(pressure) for _ = 1:3)
+    compute_vertical_velocities(
+        nothing,
+        Omega,
+        Phi_dot,
+        dp,
+        model,
+        mass,
+        dmass,
+        ugradp,
+        ugradPhi,
+        pressure,
+    )
+    return Omega, Phi_dot, dp
 end
+
+include("compute_diagnostics.jl")
 
 end # module Diagnostics
