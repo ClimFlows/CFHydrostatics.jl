@@ -13,16 +13,16 @@
     end
 end
 
-function compute_geopot!(_, Phi, model, mass, p)
+@loops function compute_geopot!(_, Phi, model, mass, p)
     let (irange, jrange) = (axes(p, 1), axes(p, 2))
         invrad2 = model.planet.radius^-2
         vol = model.gas(:p, :consvar).specific_volume
         for j in jrange
-            for i in irange
+            @vec for i in irange
                 Phi[i, j, 1] = model.Phis[i, j]
             end
             for k in axes(p, 3)
-                for i in irange
+                @vec for i in irange
                     consvar_ijk = mass[i, j, k, 2] / mass[i, j, k, 1]
                     v = vol(p[i, j, k], consvar_ijk)
                     dPhi = mass[i, j, k, 1] * v

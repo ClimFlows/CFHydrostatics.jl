@@ -32,6 +32,7 @@ diagnostics() = CookBook(;
     ugradPhi,
     Omega,
     Omega2,
+    Phi_dot,
     vertical_velocities,
 )
 
