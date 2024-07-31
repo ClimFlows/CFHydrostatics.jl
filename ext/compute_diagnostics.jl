@@ -34,7 +34,7 @@ end
 end
 
 @loops function compute_ugradp(_, ugradp, model, ux, uy, massx, massy, factor)
-    # the computation expects ux, uy as contravariant components and massx, massy as covariant gradient
+    # factor==1 if  (ux, uy) is contravariant and (massx, massy) is covariant
     # the scaling by radius^-2 turns the mass 2-form into a scalar (O-form)
     let (irange, jrange) = (axes(ugradp, 1), axes(ugradp, 2))
         radius, nz = model.planet.radius, size(ugradp, 3)
