@@ -15,7 +15,7 @@ using ManagedLoops: @loops, @vec
 using ..Dynamics
 
 diagnostics() = CookBook(;
-    mass,
+    # independent from vertical coordinate
     uv,
     surface_pressure,
     pressure,
@@ -23,18 +23,19 @@ diagnostics() = CookBook(;
     conservative_variable,
     temperature,
     sound_speed,
+    Omega,
+    Phi_dot,
+    # depend on vertical coordinate
+    mass,
     dmass,
     duv,
-    Omega,
-    Omega2,
-    Phi_dot,
     # intermediate computations
     dstate,
     ps_spec,
     vertical_velocities,
     ugradp,
     ugradPhi,
-    # for debugging
+    # mostly for debugging
     dstate_all,
     gradmass,
     ugradps,
@@ -136,24 +137,17 @@ end
 gradmass(model, state) =
     synthesis_spheroidal!(void, state.mass_spec[:, :, 1], model.domain.layer)
 
-function Omega(model, dmass, ugradp)
-    dmass = dmass[:, :, :, 1] # scalar, spatial
-    Omega = similar(dmass)
-    compute_Omega(model.mgr, Omega, model, dmass, ugradp)
-    return Omega
-end
-
-Omega2(vertical_velocities) = vertical_velocities.Omega
+Omega(vertical_velocities) = vertical_velocities.Omega
 Phi_dot(vertical_velocities) = vertical_velocities.Phi_dot
 
 function vertical_velocities(model, mass, dmass, ugradp, ugradPhi, pressure)
-    Omega, dp, Phi_dot, dthickness = (similar(pressure) for _ = 1:4)
+    Omega, Phi_dot, dp = (similar(pressure) for _ = 1:3)
     compute_vertical_velocities(
         model.mgr, model,
-        (Omega, Phi_dot, dp, dthickness),
+        (Omega, Phi_dot, dp),
         (mass, dmass, ugradp, ugradPhi, pressure),
     )
-    return (; Omega, Phi_dot, dp, dthickness)
+    return (; Omega, Phi_dot, dp)
 end
 
 include("compute_diagnostics.jl")
