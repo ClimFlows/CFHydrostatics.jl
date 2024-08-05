@@ -61,24 +61,8 @@ end
             @vec for i in irange
                 gradx = Phi_x[i, j, k] + Phi_x[i, j, k+1]
                 grady = Phi_y[i, j, k] + Phi_y[i, j, k+1]
-                ugradPhi[i, j, k] = factor * (ux[i, j, k] * gradx + uy[i, j, k] * grady)
-            end
-        end
-    end
-end
-
-@loops function compute_Omega(_, Omega, model, dmass, ugradp)
-    # dmass is a scalar (O-form)
-    let (irange, jrange) = (axes(ugradp, 1), axes(ugradp, 2))
-        radius, nz = model.planet.radius, size(ugradp, 3)
-        for j in jrange
-            @vec for i in irange
-                dp = dmass[i, j, nz] / 2
-                Omega[i, j, nz] = dp + ugradp[i, j, nz]
-                for k = nz-1:-1:1
-                    dp += (dmass[i, j, k+1] + dmass[i, j, k]) / 2
-                    Omega[i, j, k] = dp + ugradp[i, j, k]
-                end
+                ugradPhi[i, j, k] =
+                    0.5 * factor * (ux[i, j, k] * gradx + uy[i, j, k] * grady)
             end
         end
     end
@@ -86,15 +70,9 @@ end
 
 @loops function compute_vertical_velocities(
     _,
-    Omega,
-    Phi_dot,
-    dp,
     model,
-    mass,
-    dmass,
-    ugradp,
-    ugradPhi,
-    pressure,
+    (Omega, Phi_dot, dp_mid),
+    (mass, dmass, ugradp, ugradPhi, pressure),
 )
     # dmass is a scalar (O-form in kg/m²/s)
     # consvar is a scalar (O-form in kg/m²/s)
@@ -104,22 +82,23 @@ end
         for j in jrange
             @vec for i in irange
                 # top_down: dp, Omega
-                dp_top = zero(dp[i, j, 1])
+                dp_top = zero(Omega[i, j, 1])
                 for k = nz:-1:1
                     dp_bot = dp_top + dmass[i, j, k, 1]
-                    dp[i, j, k] = (dp_top + dp_bot) / 2
-                    Omega[i, j, k] = dp[i, j, k] + ugradp[i, j, k]
+                    dp_mid[i, j, k] = (dp_top + dp_bot) / 2
+                    Omega[i, j, k] = dp_mid[i, j, k] + ugradp[i, j, k]
                     dp_top = dp_bot
                 end
                 # bottom-up: Phi_dot
                 dPhi = zero(Phi_dot[i, j, 1])
                 for k = 1:nz
                     consvar = mass[i, j, k, 2] / mass[i, j, k, 1]
+                    mass_dconsvar = dmass[i, j, k, 2] - consvar * dmass[i, j, k, 1]
                     v, dv_dp, dv_dconsvar = volume(pressure[i, j, k], consvar)
                     ddPhi =
                         v * dmass[i, j, k, 1] +
-                        dv_dconsvar * (dmass[i, j, k, 2] - consvar * dmass[i, j, k, 1]) +
-                        dv_dp * mass[i, j, k, 1] * dp[i, j, k]
+                        dv_dconsvar * mass_dconsvar +
+                        dv_dp * mass[i, j, k, 1] * dp_mid[i, j, k]
                     Phi_dot[i, j, k] = (dPhi + ddPhi / 2) + ugradPhi[i, j, k]
                     dPhi += ddPhi
                 end
