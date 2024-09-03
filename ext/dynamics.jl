@@ -1,6 +1,7 @@
 module Dynamics
 
-using MutatingOrNot: void, Void
+using MutatingOrNot: void, Void, similar
+
 using ManagedLoops: @loops, @vec, no_simd
 using SHTnsSpheres:
     analysis_scalar!,
@@ -15,13 +16,6 @@ using SHTnsSpheres:
 vector_spec(spheroidal, toroidal) = (; spheroidal, toroidal)
 vector_spat(ucolat, ulon) = (; ucolat, ulon)
 HPE_state(mass_spec, uv_spec) = (; mass_spec, uv_spec)
-
-# mysimilar(x,y) = mysimilar(x) if y::Void, y otherwise
-mysimilar(_,y) = y
-mysimilar(x,::Void) = mysimilar(x)
-# apply recursively to named tuples
-mysimilar(x::AbstractArray) = Base.similar(x)
-# mysimilar(x::NamedTuple) = map(mysimilar, x)
 
 function tendencies!(dstate, scratch, model, state, t)
     # spectral fields are suffixed with _spec
@@ -44,13 +38,8 @@ function tendencies!(dstate, scratch, model, state, t)
     mass = synthesis_scalar!(mass, mass_spec, sph)
     uv = synthesis_vector!(uv, uv_spec, sph)
 
-    flux = vector_spat(mysimilar(mass, flux.ucolat), mysimilar(mass, flux.ulon))
+    flux = vector_spat(similar(mass, flux.ucolat), similar(mass, flux.ulon))
     mass_flux!(mgr, flux.ucolat, flux.ulon, -invrad2, uv.ucolat, uv.ulon, mass) # mutating only
-
-#    flux = vector_spat(
-#        (@. mgr[flux.ucolat] = -invrad2 * mass * uv.ucolat),
-#        (@. mgr[flux.ulon] = -invrad2 * mass * uv.ulon),
-#    )
 
     flux_spec = analysis_vector!(flux_spec, flux, sph)
     dmass_spec = divergence!(mgr_spec[dmass_spec], flux_spec, sph)
@@ -64,7 +53,7 @@ function tendencies!(dstate, scratch, model, state, t)
     # fcov, zeta and gh are the 2-forms a²f, a²ζ, a²Φ
     #   => scale B and qflux by radius^-2
     p = hydrostatic_pressure!(p, model, mass)
-    B, exner, consvar = Bernoulli!(B, exner, consvar, geopot, model, mass, p, uv)
+    B, exner, consvar, geopot = Bernoulli!(B, exner, consvar, geopot, model, mass, p, uv)
     exner_spec = analysis_scalar!(exner_spec, exner, sph)
     grad_exner = synthesis_spheroidal!(grad_exner, exner_spec, sph)
 
@@ -105,14 +94,6 @@ function tendencies!(dstate, scratch, model, state, t)
     return HPE_state(dmass_spec, duv_spec), scratch
 end
 
-# function mass_flux!(flux, model, mass, uv)
-#    invrad2 = model.planet.radius^-2
-#    flux = vector_spat(
-#        (@. flux.ucolat = -invrad2 * mass * uv.ucolat),
-#        (@. flux.ulon = -invrad2 * mass * uv.ulon),
-#    )
-# end
-
 @loops function mass_flux!(_, fx, fy, factor, ux, uy, mass)
     let (rx, ry, rz) = axes(ux)
         for y in ry, z in rz, q in axes(mass, 4)
@@ -149,21 +130,6 @@ end
 end
 
 function Bernoulli!(
-    ::Void,
-    ::Void,
-    ::Void,
-    ::Void,
-    model,
-    mass::Array{Float64,4},
-    p::Array{Float64,3},
-    uv,
-)
-    B() = similar(p)
-    Phi = similar(@view p[:, :, 1])
-    return Bernoulli!(B(), B(), B(), Phi, model, mass, p, uv)
-end
-
-function Bernoulli!(
     B,
     exner,
     consvar,
@@ -175,9 +141,14 @@ function Bernoulli!(
 )
     @assert size(mass, 3) == size(p, 3)
     @assert size(mass, 4) == 2 # simple fluid
+    # similar(x,y) allocates only if y::Void
+    B = similar(p, B)
+    exner = similar(p, exner)
+    consvar = similar(p, consvar)
+
     Phi = @. Phi = model.Phis
     compute_Bernoulli!(model.mgr, B, exner, consvar, Phi, mass, p, uv, model)
-    return B, exner, consvar
+    return B, exner, consvar, Phi
 end
 
 @loops function compute_Bernoulli!(_, B, exner, consvar, Phi, mass, p, uv, model)

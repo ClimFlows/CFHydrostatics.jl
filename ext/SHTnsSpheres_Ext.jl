@@ -7,7 +7,7 @@ using CFDomains: shell
 using CFHydrostatics: CFHydrostatics
 using CFHydrostatics.RemapCollocated: remap!
 
-import CFHydrostatics: HPE, initial_HPE_HV, HPE_diagnostics, HPE_dstate, HPE_scratch, HPE_tendencies!, HPE_remap!
+import CFHydrostatics: HPE, initial_HPE_HV, HPE_diagnostics, HPE_tendencies!, HPE_remap!
 
 function HPE(params, mgr, sph::SHTnsSphere, vcoord, geopotential, gas)
     (; radius, Omega), (; lon, lat) = params, sph
@@ -33,14 +33,6 @@ include("dynamics.jl")
 
 HPE_tendencies!(dstate, scratch, model, _::SHTnsSphere, state, t) =
     Dynamics.tendencies!(dstate, scratch, model, state, t)
-
-# HPE_scratch(model, ::SHTnsSphere, state) = Dynamics.scratch_space(model, state)
-
-function HPE_dstate(_, ::SHTnsSphere, state)
-    sim(x) = similar(x)
-    sim(x::NamedTuple) = map(sim, x)
-    sim(state)
-end
 
 include("diagnostics.jl")
 
