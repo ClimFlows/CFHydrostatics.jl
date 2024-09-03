@@ -31,10 +31,10 @@ end
 
 include("dynamics.jl")
 
-HPE_tendencies!(dstate, model, _::SHTnsSphere, state, scratch, t) =
-    Dynamics.tendencies!(dstate, model, state, scratch, t)
+HPE_tendencies!(dstate, scratch, model, _::SHTnsSphere, state, t) =
+    Dynamics.tendencies!(dstate, scratch, model, state, t)
 
-HPE_scratch(model, ::SHTnsSphere, state) = Dynamics.scratch_space(model, state)
+# HPE_scratch(model, ::SHTnsSphere, state) = Dynamics.scratch_space(model, state)
 
 function HPE_dstate(_, ::SHTnsSphere, state)
     sim(x) = similar(x)

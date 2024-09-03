@@ -32,12 +32,12 @@ with `state` the current state, obtained for instance from `initial_HPE`.
 """
 diagnostics(model::HPE) = HPE_diagnostics(model, model.domain.layer)
 
-CFTimeSchemes.tendencies!(dstate, model::HPE, state, scratch, t) =
-    HPE_tendencies!(dstate, model, model.domain.layer, state, scratch, t)
+CFTimeSchemes.tendencies!(dstate, scratch, model::HPE, state, t) =
+    HPE_tendencies!(dstate, scratch, model, model.domain.layer, state, t)
 
-CFTimeSchemes.scratch_space(model::HPE, state) = HPE_scratch(model, model.domain.layer, state)
+# CFTimeSchemes.scratch_space(model::HPE, state) = HPE_scratch(model, model.domain.layer, state)
 
-CFTimeSchemes.model_dstate(model::HPE, state) = HPE_dstate(model, model.domain.layer, state)
+# CFTimeSchemes.model_dstate(model::HPE, state) = HPE_dstate(model, model.domain.layer, state)
 
 vertical_remap!(backend, model, new, scratch, now) =
     HPE_remap!(backend, model, model.domain.layer, new, scratch, now)
@@ -53,6 +53,8 @@ function HPE_remap! end
 include("julia/remap_HPE.jl")
 include("julia/remap_collocated.jl")
 # include("julia/remap_voronoi.jl")
+
+include("julia/ext/SHTnsSpheres_Ext.jl") # FIXME (and fix Project.toml)
 
 using PackageExtensionCompat
 function __init__()
