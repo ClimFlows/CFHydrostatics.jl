@@ -16,7 +16,7 @@ using SHTnsSpheres:
 
 vector_spec(spheroidal, toroidal) = (; spheroidal, toroidal)
 vector_spat(ucolat, ulon) = (; ucolat, ulon)
-HPE_state(mass_spec, masses_spec, uv_spec) = (; mass_spec, masses_spec, uv_spec)
+HPE_state(masses_spec, uv_spec) = (; masses_spec, uv_spec)
 
 function tendencies!(dstate, scratch, model, state, t)
     # spectral fields are suffixed with _spec
@@ -25,9 +25,9 @@ function tendencies!(dstate, scratch, model, state, t)
     (; uv, zeta, zeta_spec, qflux, qflux_spec) = scratch
     (; p, geopot, consvar, B, exner, B_spec, exner_spec, grad_exner) = scratch
     (; masses, fluxes, fluxes_spec) = scratch
-    (; mass_spec, masses_spec, uv_spec) = state
-    dmass_spec, dmasses_spec, duv_spec =
-        dstate.mass_spec, dstate.masses_spec, dstate.uv_spec
+    (; masses_spec, uv_spec) = state
+    dmasses_spec, duv_spec =
+        dstate.masses_spec, dstate.uv_spec
     mgr, sph, invrad2, fcov =
         model.mgr, model.domain.layer, model.planet.radius^-2, model.fcov
     mgr_spec = no_simd(mgr) # complex broadcasting + SIMD not supported
@@ -113,9 +113,7 @@ function tendencies!(dstate, scratch, model, state, t)
         zeta_spec = B_spec,
     )
 
-    dmass_spec = @. mgr_spec[dmass_spec] = 0*mass_spec
-
-    return HPE_state(dmass_spec, dmasses_spec, duv_spec), scratch
+    return HPE_state(dmasses_spec, duv_spec), scratch
 end
 
 function hydrostatic_pressure!(p, model, air::Array{Float64,3})
