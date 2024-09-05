@@ -4,16 +4,16 @@
         ptop, nz = model.vcoord.ptop, size(p, 3)
         for j in jrange
             @vec for i in irange
-                p[i, j, nz] = ptop + mass[i, j, nz, 1] / 2
+                p[i, j, nz] = ptop + mass[i, j, nz] / 2
                 for k = nz:-1:2
-                    p[i, j, k-1] = p[i, j, k] + (mass[i, j, k, 1] + mass[i, j, k-1, 1]) / 2
+                    p[i, j, k-1] = p[i, j, k] + (mass[i, j, k] + mass[i, j, k-1]) / 2
                 end
             end
         end
     end
 end
 
-@loops function compute_geopot!(_, Phi, model, mass, p)
+@loops function compute_geopot!(_, Phi, model, masses, p)
     let (irange, jrange) = (axes(p, 1), axes(p, 2))
         invrad2 = model.planet.radius^-2
         vol = model.gas(:p, :consvar).specific_volume
@@ -23,9 +23,9 @@ end
             end
             for k in axes(p, 3)
                 @vec for i in irange
-                    consvar_ijk = mass[i, j, k, 2] / mass[i, j, k, 1]
+                    consvar_ijk = masses.consvar[i, j, k] / masses.air[i, j, k]
                     v = vol(p[i, j, k], consvar_ijk)
-                    dPhi = mass[i, j, k, 1] * v
+                    dPhi = masses.air[i, j, k] * v
                     Phi[i, j, k+1] = Phi[i, j, k] + dPhi
                 end
             end
@@ -72,7 +72,7 @@ end
     _,
     model,
     (Omega, Phi_dot, dp_mid),
-    (mass, dmass, ugradp, ugradPhi, pressure),
+    (masses, dmasses, ugradp, ugradPhi, pressure),
 )
     # dmass is a scalar (O-form in kg/m²/s)
     # consvar is a scalar (O-form in kg/m²/s)
@@ -84,7 +84,7 @@ end
                 # top_down: dp, Omega
                 dp_top = zero(Omega[i, j, 1])
                 for k = nz:-1:1
-                    dp_bot = dp_top + dmass[i, j, k, 1]
+                    dp_bot = dp_top + dmasses.air[i, j, k]
                     dp_mid[i, j, k] = (dp_top + dp_bot) / 2
                     Omega[i, j, k] = dp_mid[i, j, k] + ugradp[i, j, k]
                     dp_top = dp_bot
@@ -92,13 +92,13 @@ end
                 # bottom-up: Phi_dot
                 dPhi = zero(Phi_dot[i, j, 1])
                 for k = 1:nz
-                    consvar = mass[i, j, k, 2] / mass[i, j, k, 1]
-                    mass_dconsvar = dmass[i, j, k, 2] - consvar * dmass[i, j, k, 1]
+                    consvar = masses.consvar[i, j, k] / masses.air[i, j, k]
+                    mass_dconsvar = dmasses.consvar[i, j, k] - consvar * dmasses.air[i, j, k]
                     v, dv_dp, dv_dconsvar = volume(pressure[i, j, k], consvar)
                     ddPhi =
-                        v * dmass[i, j, k, 1] +
+                        v * dmasses.air[i, j, k] +
                         dv_dconsvar * mass_dconsvar +
-                        dv_dp * mass[i, j, k, 1] * dp_mid[i, j, k]
+                        dv_dp * masses.air[i, j, k] * dp_mid[i, j, k]
                     Phi_dot[i, j, k] = (dPhi + ddPhi / 2) + ugradPhi[i, j, k]
                     dPhi += ddPhi
                 end
