@@ -83,10 +83,11 @@ function tendencies!(dstate, scratch, model, state, t)
     # fcov, zeta and gh are the 2-forms a²f, a²ζ, a²Φ
     #   => scale B and qflux by radius^-2
 
-    p = hydrostatic_pressure!(p, model, mass)
-    # p = hydrostatic_pressure!(p, model, masses.air)
+    # p = hydrostatic_pressure!(p, model, mass)
+    p = hydrostatic_pressure!(p, model, masses.air)
 
-    B, exner, consvar, geopot = Bernoulli!(B, exner, consvar, geopot, model, mass, p, uv)
+    # B, exner, consvar, geopot = Bernoulli!(B, exner, consvar, geopot, model, mass, p, uv)
+    B, exner, consvar, geopot = Bernoulli!(B, exner, consvar, geopot, model, masses, p, uv)
     exner_spec = analysis_scalar!(exner_spec, exner, sph)
     grad_exner = synthesis_spheroidal!(grad_exner, exner_spec, sph)
 
@@ -170,29 +171,30 @@ end
     end
 end
 
+get_masses(masses::NamedTuple) = masses
+get_masses(mass::Array) = @views (air=mass[:,:,:,1], consvar=mass[:,:,:,1])
+
 function Bernoulli!(
     B,
     exner,
     consvar,
     Phi,
     model,
-    mass::Array{Float64,4},
+    mass,
     p::Array{Float64,3},
     uv,
 )
-    @assert size(mass, 3) == size(p, 3)
-    @assert size(mass, 4) == 2 # simple fluid
     # similar(x,y) allocates only if y::Void
     B = similar(p, B)
     exner = similar(p, exner)
     consvar = similar(p, consvar)
 
     Phi = @. Phi = model.Phis
-    compute_Bernoulli!(model.mgr, B, exner, consvar, Phi, mass, p, uv, model)
+    compute_Bernoulli!(model.mgr, B, exner, consvar, Phi, get_masses(mass), p, uv, model)
     return B, exner, consvar, Phi
 end
 
-@loops function compute_Bernoulli!(_, B, exner, consvar, Phi, mass, p, uv, model)
+@loops function compute_Bernoulli!(_, B, exner, consvar, Phi, masses, p, uv, model)
     let (irange, jrange) = (axes(p, 1), axes(p, 2))
         ux, uy = uv.ucolat, uv.ulon
         invrad2 = model.planet.radius^-2
@@ -201,9 +203,9 @@ end
             for k in axes(p, 3)
                 @vec for i in irange
                     ke = (invrad2 / 2) * (ux[i, j, k]^2 + uy[i, j, k]^2)
-                    consvar_ijk = mass[i, j, k, 2] / mass[i, j, k, 1]
+                    consvar_ijk = masses.consvar[i, j, k] / masses.air[i, j, k]
                     h, v, exner_ijk = Exner(p[i, j, k], consvar_ijk)
-                    Phi_up = Phi[i, j] + invrad2 * mass[i, j, k, 1] * v # geopotential at upper interface
+                    Phi_up = Phi[i, j] + invrad2 * masses.air[i, j, k] * v # geopotential at upper interface
                     B[i, j, k] =
                         ke + (Phi_up + Phi[i, j]) / 2 + (h - consvar_ijk * exner_ijk)
                     consvar[i, j, k] = consvar_ijk
