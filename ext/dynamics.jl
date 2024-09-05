@@ -21,8 +21,8 @@ function tendencies!(dstate, scratch, model, state, t)
     # spectral fields are suffixed with _spec
     # vector, spectral = (spheroidal, toroidal)
     # vector, spatial = (ucolat, ulon)
-    (; uv, flux, flux_spec, zeta, zeta_spec, qflux, qflux_spec) = scratch
-    (; mass, p, geopot, consvar, B, exner, B_spec, exner_spec, grad_exner) = scratch
+    (; uv, zeta, zeta_spec, qflux, qflux_spec) = scratch
+    (; p, geopot, consvar, B, exner, B_spec, exner_spec, grad_exner) = scratch
     (; masses, fluxes, fluxes_spec) = scratch
     (; mass_spec, masses_spec, uv_spec) = state
     dmass_spec, dmasses_spec, duv_spec =
@@ -37,23 +37,11 @@ function tendencies!(dstate, scratch, model, state, t)
     # gh is the 2-form a²Φ
     # divergence! is relative to the unit sphere
     #   => scale flux by radius^-2
-    mass = synthesis_scalar!(mass, mass_spec, sph)
     uv = synthesis_vector!(uv, uv_spec, sph)
 
-    flux = vector_spat(similar(mass, flux.ucolat), similar(mass, flux.ulon))
-    mass_flux!(mgr, flux.ucolat, flux.ulon, -invrad2, uv.ucolat, uv.ulon, mass) # mutating only
-
-    flux_spec = analysis_vector!(flux_spec, flux, sph)
-    dmass_spec = divergence!(mgr_spec[dmass_spec], flux_spec, sph)
-
-    # begin NEW
     masses = (
         air = synthesis_scalar!(masses.air, masses_spec.air, sph),
         consvar = synthesis_scalar!(masses.consvar, masses_spec.consvar, sph),
-    )
-    flx(f, m) = vector_spat(
-        (@. mgr[f.ucolat] = (-invrad2) * uv.ucolat * m),
-        (@. mgr[f.ulon] = (-invrad2) * uv.ulon * m),
     )
     fluxes = (
         air = vector_spat(
@@ -83,10 +71,8 @@ function tendencies!(dstate, scratch, model, state, t)
     # fcov, zeta and gh are the 2-forms a²f, a²ζ, a²Φ
     #   => scale B and qflux by radius^-2
 
-    # p = hydrostatic_pressure!(p, model, mass)
     p = hydrostatic_pressure!(p, model, masses.air)
 
-    # B, exner, consvar, geopot = Bernoulli!(B, exner, consvar, geopot, model, mass, p, uv)
     B, exner, consvar, geopot = Bernoulli!(B, exner, consvar, geopot, model, masses, p, uv)
     exner_spec = analysis_scalar!(exner_spec, exner, sph)
     grad_exner = synthesis_spheroidal!(grad_exner, exner_spec, sph)
@@ -108,9 +94,6 @@ function tendencies!(dstate, scratch, model, state, t)
     )
     scratch = (;
         uv,
-        mass,
-        flux,
-        flux_spec,
         masses,
         fluxes,
         fluxes_spec,
@@ -128,25 +111,9 @@ function tendencies!(dstate, scratch, model, state, t)
         grad_exner,
     )
 
+    dmass_spec = @. mgr_spec[dmass_spec] = 0*mass_spec
+
     return HPE_state(dmass_spec, dmasses_spec, duv_spec), scratch
-end
-
-@loops function mass_flux!(_, fx, fy, factor, ux, uy, mass)
-    let (rx, ry, rz) = axes(ux)
-        for y in ry, z in rz, q in axes(mass, 4)
-            @vec for x in rx
-                fx[x, y, z, q] = factor * mass[x, y, z, q] * ux[x, y, z]
-                fy[x, y, z, q] = factor * mass[x, y, z, q] * uy[x, y, z]
-            end
-        end
-    end
-end
-
-function hydrostatic_pressure!(p, model, mass::Array{Float64,4})
-    air = @view mass[:,:,:,1]
-    p = similar(air, p)
-    compute_hydrostatic_pressure(model.mgr, p, model, air)
-    return p
 end
 
 function hydrostatic_pressure!(p, model, air::Array{Float64,3})
@@ -171,26 +138,14 @@ end
     end
 end
 
-get_masses(masses::NamedTuple) = masses
-get_masses(mass::Array) = @views (air=mass[:,:,:,1], consvar=mass[:,:,:,1])
-
-function Bernoulli!(
-    B,
-    exner,
-    consvar,
-    Phi,
-    model,
-    mass,
-    p::Array{Float64,3},
-    uv,
-)
+function Bernoulli!(B, exner, consvar, Phi, model, masses, p, uv)
     # similar(x,y) allocates only if y::Void
     B = similar(p, B)
     exner = similar(p, exner)
     consvar = similar(p, consvar)
 
     Phi = @. Phi = model.Phis
-    compute_Bernoulli!(model.mgr, B, exner, consvar, Phi, get_masses(mass), p, uv, model)
+    compute_Bernoulli!(model.mgr, B, exner, consvar, Phi, masses, p, uv, model)
     return B, exner, consvar, Phi
 end
 
