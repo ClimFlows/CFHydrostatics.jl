@@ -64,7 +64,7 @@ end
 
 function scaling_pressure(choices)
     (; nlat, nz) = choices()
-    mass = randn(2nlat, nlat, nz, 2)
+    mass = randn(2nlat, nlat, nz)
     p = hydrostatic_pressure!(void, model(), mass)
     for vsize in (16,32)
         scaling("hydrostatic_pressure!", VectorizedCPU(vsize), 100) do mgr
