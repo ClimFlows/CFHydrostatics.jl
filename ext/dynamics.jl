@@ -11,7 +11,8 @@ using SHTnsSpheres:
     synthesis_spheroidal!,
     divergence!,
     curl!,
-    shtns_alloc
+    shtns_alloc,
+    erase
 
 vector_spec(spheroidal, toroidal) = (; spheroidal, toroidal)
 vector_spat(ucolat, ulon) = (; ucolat, ulon)
@@ -74,7 +75,7 @@ function tendencies!(dstate, scratch, model, state, t)
     p = hydrostatic_pressure!(p, model, masses.air)
 
     B, exner, consvar, geopot = Bernoulli!(B, exner, consvar, geopot, model, masses, p, uv)
-    exner_spec = analysis_scalar!(exner_spec, exner, sph)
+    exner_spec = analysis_scalar!(exner_spec, erase(exner), sph)
     grad_exner = synthesis_spheroidal!(grad_exner, exner_spec, sph)
 
     zeta_spec = curl!(mgr_spec[zeta_spec], uv_spec, sph)
@@ -87,7 +88,7 @@ function tendencies!(dstate, scratch, model, state, t)
     )
     qflux_spec = analysis_vector!(qflux_spec, qflux, sph)
 
-    B_spec = analysis_scalar!(B_spec, B, sph)
+    B_spec = analysis_scalar!(B_spec, erase(B), sph)
     duv_spec = vector_spec(
         (@. mgr_spec[duv_spec.spheroidal] = qflux_spec.spheroidal - B_spec),
         (@. mgr_spec[duv_spec.toroidal] = qflux_spec.toroidal),
@@ -97,18 +98,19 @@ function tendencies!(dstate, scratch, model, state, t)
         masses,
         fluxes,
         fluxes_spec,
-        zeta,
-        zeta_spec,
-        qflux,
-        qflux_spec,
-        p,
         geopot,
         consvar,
         B,
         exner,
         B_spec,
         exner_spec,
-        grad_exner,
+        # reused scratch space
+        grad_exner = fluxes.consvar,
+        qflux = fluxes.air,
+        qflux_spec = fluxes_spec.air,
+        p = exner,
+        zeta = exner,
+        zeta_spec = B_spec,
     )
 
     dmass_spec = @. mgr_spec[dmass_spec] = 0*mass_spec
