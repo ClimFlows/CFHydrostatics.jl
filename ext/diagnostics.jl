@@ -27,6 +27,7 @@ diagnostics() = CookBook(;
     Phi_dot,
     # depend on vertical coordinate
     mass,
+    masses,
     dmass,
     duv,
     # intermediate computations
@@ -42,12 +43,20 @@ diagnostics() = CookBook(;
     gradPhi,
 )
 
-dstate(model, state) = Dynamics.tendencies!(void, model, state, void, 0.0)
-dstate_all(model, state) = Dynamics.tendencies_all(void, model, state, void, 0.0)
+dstate(dstate_all) = dstate_all[1]
+dstate_all(model, state) = Dynamics.tendencies!(void, void, model, state, 0.0)
 
 mass(model, state) =
     model.planet.radius^-2 *
     synthesis_scalar!(void, copy(state.mass_spec), model.domain.layer)
+
+function masses(model, state)
+    fac, sph = model.planet.radius^-2, model.domain.layer
+    return (
+        air = synthesis_scalar!(void, fac*state.masses_spec.air, sph),
+        consvar = synthesis_scalar!(void, fac*state.masses_spec.consvar, sph),
+    )
+end
 
 dmass(model, dstate) = mass(model, dstate)
 
@@ -59,8 +68,9 @@ end
 
 duv(model, dstate) = uv(model, dstate)
 
-ps_spec(model, state) =
-    @views (model.planet.radius^-2) * sum(state.mass_spec[:, :, 1]; dims = 2)
+ps_spec(model, state) = (model.planet.radius^-2) * sum(state.masses_spec.air; dims = 2)
+# ps_spec(model, state) =
+#    @views (model.planet.radius^-2) * sum(state.mass_spec[:, :, 1]; dims = 2)
 surface_pressure(model, ps_spec) =
     synthesis_scalar!(void, ps_spec[:, 1], model.domain.layer) .+ model.vcoord.ptop
 
@@ -69,6 +79,8 @@ function conservative_variable(mass)
     mass_consvar = @view mass[:, :, :, 2]
     return @. mass_consvar / mass_air
 end
+
+# conservative_variable(masses) = @. masses.consvar / masses.air
 
 temperature(model, pressure, conservative_variable) =
     model.gas(:p, :consvar).temperature.(pressure, conservative_variable)

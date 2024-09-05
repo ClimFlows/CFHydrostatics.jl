@@ -23,8 +23,10 @@ function tendencies!(dstate, scratch, model, state, t)
     # vector, spatial = (ucolat, ulon)
     (; uv, flux, flux_spec, zeta, zeta_spec, qflux, qflux_spec) = scratch
     (; mass, p, geopot, consvar, B, exner, B_spec, exner_spec, grad_exner) = scratch
+    (; masses, fluxes, fluxes_spec) = scratch
     (; mass_spec, masses_spec, uv_spec) = state
-    dmass_spec, dmasses_spec, duv_spec = dstate.mass_spec, dstate.masses_spec, dstate.uv_spec
+    dmass_spec, dmasses_spec, duv_spec =
+        dstate.mass_spec, dstate.masses_spec, dstate.uv_spec
     mgr, sph, invrad2, fcov =
         model.mgr, model.domain.layer, model.planet.radius^-2, model.fcov
     mgr_spec = no_simd(mgr) # complex broadcasting + SIMD not supported
@@ -44,10 +46,34 @@ function tendencies!(dstate, scratch, model, state, t)
     flux_spec = analysis_vector!(flux_spec, flux, sph)
     dmass_spec = divergence!(mgr_spec[dmass_spec], flux_spec, sph)
 
-    dmasses_spec = (
-        air = (@. dmasses_spec.air = 0*masses_spec.air),
-        consvar = (@. dmasses_spec.consvar = 0*masses_spec.consvar)
+    # begin NEW
+    masses = (
+        air = synthesis_scalar!(masses.air, masses_spec.air, sph),
+        consvar = synthesis_scalar!(masses.consvar, masses_spec.consvar, sph),
     )
+    flx(f, m) = vector_spat(
+        (@. mgr[f.ucolat] = (-invrad2) * uv.ucolat * m),
+        (@. mgr[f.ulon] = (-invrad2) * uv.ulon * m),
+    )
+    fluxes = (
+        air = vector_spat(
+            (@. mgr[fluxes.air.ucolat] = (-invrad2) * uv.ucolat * masses.air),
+            (@. mgr[fluxes.air.ulon] = (-invrad2) * uv.ulon * masses.air),
+        ),
+        consvar = vector_spat(
+            (@. mgr[fluxes.consvar.ucolat] = (-invrad2) * uv.ucolat * masses.consvar),
+            (@. mgr[fluxes.consvar.ulon] = (-invrad2) * uv.ulon * masses.consvar),
+        ),
+    )
+    fluxes_spec = (
+        air = analysis_vector!(fluxes_spec.air, fluxes.air, sph),
+        consvar = analysis_vector!(fluxes_spec.consvar, fluxes.consvar, sph),
+    )
+    dmasses_spec = (
+        air = divergence!(mgr_spec[dmasses_spec.air], fluxes_spec.air, sph),
+        consvar = divergence!(mgr_spec[dmasses_spec.consvar], fluxes_spec.consvar, sph),
+    )
+
     # curl-form momentum budget:
     #   ∂u/∂t = (f+ζ)v - θ∂π/∂x- ∂B/∂x
     #   ∂v/∂t = -(f+ζ)u - θ∂π/∂y - ∂B/∂y
@@ -56,7 +82,10 @@ function tendencies!(dstate, scratch, model, state, t)
     # curl! is relative to the unit sphere
     # fcov, zeta and gh are the 2-forms a²f, a²ζ, a²Φ
     #   => scale B and qflux by radius^-2
+
     p = hydrostatic_pressure!(p, model, mass)
+    # p = hydrostatic_pressure!(p, model, masses.air)
+
     B, exner, consvar, geopot = Bernoulli!(B, exner, consvar, geopot, model, mass, p, uv)
     exner_spec = analysis_scalar!(exner_spec, exner, sph)
     grad_exner = synthesis_spheroidal!(grad_exner, exner_spec, sph)
@@ -78,13 +107,16 @@ function tendencies!(dstate, scratch, model, state, t)
     )
     scratch = (;
         uv,
+        mass,
         flux,
         flux_spec,
+        masses,
+        fluxes,
+        fluxes_spec,
         zeta,
         zeta_spec,
         qflux,
         qflux_spec,
-        mass,
         p,
         geopot,
         consvar,
@@ -109,11 +141,16 @@ end
     end
 end
 
-hydrostatic_pressure!(::Void, model, mass) =
-    hydrostatic_pressure!(similar(@view mass[:, :, :, 1]), model, mass)
-function hydrostatic_pressure!(p::Array{Float64,3}, model, mass::Array{Float64,4})
-    @assert size(mass, 3) == size(p, 3)
-    compute_hydrostatic_pressure(model.mgr, p, model, mass)
+function hydrostatic_pressure!(p, model, mass::Array{Float64,4})
+    air = @view mass[:,:,:,1]
+    p = similar(air, p)
+    compute_hydrostatic_pressure(model.mgr, p, model, air)
+    return p
+end
+
+function hydrostatic_pressure!(p, model, air::Array{Float64,3})
+    p = similar(air, p)
+    compute_hydrostatic_pressure(model.mgr, p, model, air)
     return p
 end
 
@@ -123,10 +160,10 @@ end
         half_invrad2 = model.planet.radius^-2 / 2
         for j in jrange
             @vec for i in irange
-                p[i, j, nz] = ptop + half_invrad2 * mass[i, j, nz, 1]
+                p[i, j, nz] = ptop + half_invrad2 * mass[i, j, nz]
                 for k = nz:-1:2
                     p[i, j, k-1] =
-                        p[i, j, k] + half_invrad2 * (mass[i, j, k, 1] + mass[i, j, k-1, 1])
+                        p[i, j, k] + half_invrad2 * (mass[i, j, k] + mass[i, j, k-1])
                 end
             end
         end
