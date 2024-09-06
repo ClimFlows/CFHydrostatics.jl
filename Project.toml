@@ -33,6 +33,7 @@ julia = "1.8"
 
 [extras]
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+SHTnsSpheres = "9e5c175a-5132-4517-85a1-2957ec255f89"
 
 [targets]
 test = ["Test"]
