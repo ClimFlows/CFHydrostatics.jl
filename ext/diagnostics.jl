@@ -26,8 +26,8 @@ diagnostics() = CookBook(;
     Omega,
     Phi_dot,
     # depend on vertical coordinate
-    mass,
-    dmass,
+    masses,
+    dmasses,
     duv,
     # intermediate computations
     dstate,
@@ -42,14 +42,17 @@ diagnostics() = CookBook(;
     gradPhi,
 )
 
-dstate(model, state) = Dynamics.tendencies!(void, model, state, void, 0.0)
-dstate_all(model, state) = Dynamics.tendencies_all(void, model, state, void, 0.0)
+dstate(dstate_all) = dstate_all[1]
+dstate_all(model, state) = Dynamics.tendencies!(void, void, model, state, 0.0)
 
-mass(model, state) =
-    model.planet.radius^-2 *
-    synthesis_scalar!(void, copy(state.mass_spec), model.domain.layer)
-
-dmass(model, dstate) = mass(model, dstate)
+function masses(model, state)
+    fac, sph = model.planet.radius^-2, model.domain.layer
+    return (
+        air = synthesis_scalar!(void, fac*state.masses_spec.air, sph),
+        consvar = synthesis_scalar!(void, fac*state.masses_spec.consvar, sph),
+    )
+end
+dmasses(model, dstate) = masses(model, dstate)
 
 function uv(model, state)
     (; ucolat, ulon) = synthesis_vector!(void, map(copy, state.uv_spec), model.domain.layer)
@@ -59,16 +62,12 @@ end
 
 duv(model, dstate) = uv(model, dstate)
 
-ps_spec(model, state) =
-    @views (model.planet.radius^-2) * sum(state.mass_spec[:, :, 1]; dims = 2)
+ps_spec(model, state) = (model.planet.radius^-2) * sum(state.masses_spec.air; dims = 2)
+
 surface_pressure(model, ps_spec) =
     synthesis_scalar!(void, ps_spec[:, 1], model.domain.layer) .+ model.vcoord.ptop
 
-function conservative_variable(mass)
-    mass_air = @view mass[:, :, :, 1]
-    mass_consvar = @view mass[:, :, :, 2]
-    return @. mass_consvar / mass_air
-end
+conservative_variable(masses) = @. masses.consvar / masses.air
 
 temperature(model, pressure, conservative_variable) =
     model.gas(:p, :consvar).temperature.(pressure, conservative_variable)
@@ -76,15 +75,15 @@ temperature(model, pressure, conservative_variable) =
 sound_speed(model, pressure, temperature) =
     model.gas(:p, :T).sound_speed.(pressure, temperature)
 
-function pressure(model, mass)
-    p = similar(mass[:, :, :, 1])
-    compute_pressure!(model.mgr, p, model, mass)
+function pressure(model, masses)
+    p = similar(masses.air)
+    compute_pressure!(model.mgr, p, model, masses.air)
     return p
 end
 
-function geopotential(model, mass, pressure)
+function geopotential(model, masses, pressure)
     Phi = similar(pressure, size(pressure) .+ (0, 0, 1))
-    compute_geopot!(nothing, Phi, model, mass, pressure)
+    compute_geopot!(nothing, Phi, model, masses, pressure)
     return Phi
 end
 
@@ -135,17 +134,17 @@ function gradPhi(model, uv, geopotential)
 end
 
 gradmass(model, state) =
-    synthesis_spheroidal!(void, state.mass_spec[:, :, 1], model.domain.layer)
+    synthesis_spheroidal!(void, state.masses_spec.air, model.domain.layer)
 
 Omega(vertical_velocities) = vertical_velocities.Omega
 Phi_dot(vertical_velocities) = vertical_velocities.Phi_dot
 
-function vertical_velocities(model, mass, dmass, ugradp, ugradPhi, pressure)
+function vertical_velocities(model, masses, dmasses, ugradp, ugradPhi, pressure)
     Omega, Phi_dot, dp = (similar(pressure) for _ = 1:3)
     compute_vertical_velocities(
         model.mgr, model,
         (Omega, Phi_dot, dp),
-        (mass, dmass, ugradp, ugradPhi, pressure),
+        (masses, dmasses, ugradp, ugradPhi, pressure),
     )
     return (; Omega, Phi_dot, dp)
 end

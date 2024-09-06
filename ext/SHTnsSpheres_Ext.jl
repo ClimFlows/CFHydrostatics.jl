@@ -20,13 +20,23 @@ end
 ## these "constructors" seem to help with type stability
 vector_spec(spheroidal, toroidal) = (; spheroidal, toroidal)
 vector_spat(ucolat, ulon) = (; ucolat, ulon)
-HPE_state(mass_spec, uv_spec) = (; mass_spec, uv_spec)
+HPE_state(masses_spec, uv_spec) = (; masses_spec, uv_spec)
 
 function initial_HPE_HV(model, nz, sph::SHTnsSphere, case)
-    mass, ulon, ulat = CFHydrostatics.initial_HPE_HV_collocated(model, nz, sph.lon, sph.lat, model.gas, case)
-    mass_spec = analysis_scalar!(void, mass, sph)
+    masses, ulon, ulat = CFHydrostatics.initial_HPE_HV_collocated(
+        model,
+        nz,
+        sph.lon,
+        sph.lat,
+        model.gas,
+        case,
+    )
+    masses_spec = (
+        air = analysis_scalar!(void, masses.air, sph),
+        consvar = analysis_scalar!(void, masses.consvar, sph),
+    )
     uv_spec = analysis_vector!(void, vector_spat(-ulat, ulon), sph)
-    HPE_state(mass_spec, uv_spec)
+    HPE_state(masses_spec, uv_spec)
 end
 
 include("dynamics.jl")
@@ -36,8 +46,8 @@ HPE_tendencies!(dstate, scratch, model, _::SHTnsSphere, state, t) =
 
 include("diagnostics.jl")
 
-HPE_remap!(mgr, model, ::SHTnsSphere, new, #==# scratch, #==# now) =
-    remap!(mgr, model.vcoord, model.domain.layout, new, #==# scratch, #==# now)
+HPE_remap!(mgr, model, ::SHTnsSphere, new, scratch, now) = #==#
+    remap!(mgr, model.vcoord, model.domain.layout, new, scratch, now) #==#
 
 HPE_diagnostics(_, ::SHTnsSphere) = Diagnostics.diagnostics()
 

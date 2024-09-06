@@ -25,9 +25,9 @@ function initial_HPE_HV_collocated(model, nz, lon, lat, gas::SimpleFluid, case)
     radius, vcoord = model.planet.radius, model.vcoord
     consvar = gas(:p, :v).conservative_variable
     alloc(dims...) = similar(lon, size(lon)..., dims...)
-    mass, ulon, ulat = alloc(nz, 2), alloc(nz), alloc(nz)
+    masses, ulon, ulat = (air=alloc(nz), consvar=alloc(nz)), alloc(nz), alloc(nz)
 
-    for i in axes(mass, 1), j in axes(mass, 2), k = 1:nz
+    for i in axes(lon, 1), j in axes(lon, 2), k = 1:nz
         let lon = lon[i, j], lat = lat[i, j]
             ps, _ = case(lon, lat)
             p = pressure_level(2k - 1, ps, vcoord) # full level k
@@ -39,9 +39,9 @@ function initial_HPE_HV_collocated(model, nz, lon, lat, gas::SimpleFluid, case)
             Phi_lower, _, _ = case(lon, lat, p_lower)
             Phi_upper, _, _ = case(lon, lat, p_upper)
             v = (Phi_upper - Phi_lower) / mg # dPhi = -v . dp
-            mass[i, j, k, 1] = radius^2 * mg
-            mass[i, j, k, 2] = (radius^2 * mg) * consvar(p, v)
+            masses.air[i, j, k] = radius^2 * mg
+            masses.consvar[i, j, k] = (radius^2 * mg) * consvar(p, v)
         end
     end
-    return mass, ulon, ulat
+    return masses, ulon, ulat
 end
