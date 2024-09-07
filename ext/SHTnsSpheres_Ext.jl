@@ -20,7 +20,7 @@ end
 ## these "constructors" seem to help with type stability
 vector_spec(spheroidal, toroidal) = (; spheroidal, toroidal)
 vector_spat(ucolat, ulon) = (; ucolat, ulon)
-HPE_state(masses_spec, uv_spec) = (; masses_spec, uv_spec)
+HPE_state(mass_air_spec, mass_consvar_spec, uv_spec) = (; mass_air_spec, mass_consvar_spec, uv_spec)
 
 function initial_HPE_HV(model, nz, sph::SHTnsSphere, case)
     masses, ulon, ulat = CFHydrostatics.initial_HPE_HV_collocated(
@@ -31,12 +31,10 @@ function initial_HPE_HV(model, nz, sph::SHTnsSphere, case)
         model.gas,
         case,
     )
-    masses_spec = (
-        air = analysis_scalar!(void, masses.air, sph),
-        consvar = analysis_scalar!(void, masses.consvar, sph),
-    )
+    mass_air_spec = analysis_scalar!(void, masses.air, sph)
+    mass_consvar_spec = analysis_scalar!(void, masses.consvar, sph)
     uv_spec = analysis_vector!(void, vector_spat(-ulat, ulon), sph)
-    HPE_state(masses_spec, uv_spec)
+    HPE_state(mass_air_spec, mass_consvar_spec, uv_spec)
 end
 
 include("dynamics.jl")
