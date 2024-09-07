@@ -15,15 +15,16 @@ using SHTnsSpheres:
     erase,
     batch
 
+# spectral fields are suffixed with _spec
+# vector, spectral = (spheroidal, toroidal)
+# vector, spatial = (ucolat, ulon)
+
 vector_spec(spheroidal, toroidal) = (; spheroidal, toroidal)
 vector_spat(ucolat, ulon) = (; ucolat, ulon)
 HPE_state(mass_air_spec, mass_consvar_spec, uv_spec) =
     (; mass_air_spec, mass_consvar_spec, uv_spec)
 
 function tendencies!(dstate, scratch, model, state, t)
-    # spectral fields are suffixed with _spec
-    # vector, spectral = (spheroidal, toroidal)
-    # vector, spatial = (ucolat, ulon)
     (; locals, locals_dmass, locals_duv) = scratch
     (; uv, mass_air, mass_consvar, p, B, exner, consvar, geopot) = locals
     (; mass_air_spec, mass_consvar_spec, uv_spec) = state
@@ -31,33 +32,35 @@ function tendencies!(dstate, scratch, model, state, t)
 
     sph, invrad2, fcov = model.domain.layer, model.planet.radius^-2, model.fcov
 
-    # flux-form mass balance
-    (; dmass_air_spec, dmass_consvar_spec, uv, mass_air, mass_consvar), locals_dmass = let
-        inputs = (; mass_air_spec, mass_consvar_spec, uv_spec)
-        outputs = (; dmass_air_spec, dmass_consvar_spec, uv, mass_air, mass_consvar)
-        fuse(mass_budgets!, outputs, scratch.locals_dmass, inputs, sph, sph.laplace, invrad2)
-        # mass_budgets!(outputs, scratch.locals_dmass, inputs, sph, sph.laplace, invrad2)
-    end
+    fused_mass_budgets! = Fused(mass_budgets!)
+    fused_curl_form! = Fused(curl_form!)
 
+    # flux-form mass balance
+    (; dmass_air_spec, dmass_consvar_spec, uv, mass_air, mass_consvar), locals_dmass =
+        fused_mass_budgets!(
+            (; dmass_air_spec, dmass_consvar_spec, uv, mass_air, mass_consvar),
+            scratch.locals_dmass,
+            (; mass_air_spec, mass_consvar_spec, uv_spec),
+            sph,
+            sph.laplace,
+            invrad2,
+        )
+
+    # hydrostatic balance, geopotential, exner function
     p = hydrostatic_pressure!(p, model, mass_air)
-    B, exner, consvar, geopot = Bernoulli!(
-        B,
-        exner,
-        consvar,
-        geopot,
-        model,
-        (air = mass_air, consvar = mass_consvar),
-        p,
-        uv,
-    )
+    B, exner, consvar, geopot =
+        Bernoulli!((B, exner, consvar, geopot), (mass_air, mass_consvar, p, uv), model)
 
     # curl-form momentum balance
-    (; duv_spec), locals_duv = let
-        inputs = (; exner, consvar, B, uv_spec, uv)
-        outputs = (; duv_spec)
-        fuse(curl_form!, outputs, scratch.locals_duv, inputs, sph, sph.laplace, invrad2, fcov)
-        # curl_form!(outputs, scratch.locals_duv, inputs, sph, sph.laplace, invrad2, fcov)
-    end
+    (; duv_spec), locals_duv = fused_curl_form!(
+        (; duv_spec),
+        scratch.locals_duv,
+        (; exner, consvar, B, uv_spec, uv),
+        sph,
+        sph.laplace,
+        invrad2,
+        fcov,
+    )
 
     locals = (; uv, mass_air, mass_consvar, p, B, exner, consvar, geopot)
     scratch = (; locals, locals_duv, locals_dmass)
@@ -73,7 +76,7 @@ end
        => scale flux by radius^-2
 ========================================================================#
 
-@inbounds function mass_budgets!(outputs, locals, inputs, sph, laplace, factor)
+function mass_budgets!(outputs, locals, inputs, sph, laplace, factor)
     (; mass_air_spec, mass_consvar_spec, uv_spec) = inputs
     (; dmass_air_spec, dmass_consvar_spec, uv, mass_air, mass_consvar) = outputs
     (; fx, fy, flux_air_spec, fcx, fcy, flux_consvar_spec) = locals
@@ -117,7 +120,7 @@ function curl_form!(outputs, locals, inputs, sph, laplace, invrad2, fcov)
     zeta_spec = @. zeta_spec = -laplace * uv_spec.toroidal # curl
     zeta = synthesis_scalar!(zeta, zeta_spec, sph)
     (ux, uy) = uv
-    fx = @. fx =  invrad2 * (zeta + fcov) * uy - consvar * gradx
+    fx = @. fx = invrad2 * (zeta + fcov) * uy - consvar * gradx
     fy = @. fy = -invrad2 * (zeta + fcov) * ux - consvar * grady
     qflux_spec = analysis_vector!(qflux_spec, erase(vector_spat(fx, fy)), sph)
 
@@ -155,18 +158,28 @@ end
     end
 end
 
-function Bernoulli!(B, exner, consvar, Phi, model, masses, p, uv)
+function Bernoulli!((B, exner, consvar, Phi), (mass_air, mass_consvar, p, uv), model)
     # similar(x,y) allocates only if y::Void
     B = similar(p, B)
     exner = similar(p, exner)
     consvar = similar(p, consvar)
 
     Phi = @. Phi = model.Phis
-    compute_Bernoulli!(model.mgr, B, exner, consvar, Phi, masses, p, uv, model)
+    compute_Bernoulli!(
+        model.mgr,
+        (B, exner, consvar, Phi),
+        (mass_air, mass_consvar, p, uv),
+        model,
+    )
     return B, exner, consvar, Phi
 end
 
-@loops function compute_Bernoulli!(_, B, exner, consvar, Phi, masses, p, uv, model)
+@loops function compute_Bernoulli!(
+    _,
+    (B, exner, consvar, Phi),
+    (mass_air, mass_consvar, p, uv),
+    model,
+)
     let (irange, jrange) = (axes(p, 1), axes(p, 2))
         ux, uy = uv.ucolat, uv.ulon
         invrad2 = model.planet.radius^-2
@@ -175,9 +188,9 @@ end
             for k in axes(p, 3)
                 @vec for i in irange
                     ke = (invrad2 / 2) * (ux[i, j, k]^2 + uy[i, j, k]^2)
-                    consvar_ijk = masses.consvar[i, j, k] / masses.air[i, j, k]
+                    consvar_ijk = mass_consvar[i, j, k] / mass_air[i, j, k]
                     h, v, exner_ijk = Exner(p[i, j, k], consvar_ijk)
-                    Phi_up = Phi[i, j] + invrad2 * masses.air[i, j, k] * v # geopotential at upper interface
+                    Phi_up = Phi[i, j] + invrad2 * mass_air[i, j, k] * v # geopotential at upper interface
                     B[i, j, k] =
                         ke + (Phi_up + Phi[i, j]) / 2 + (h - consvar_ijk * exner_ijk)
                     consvar[i, j, k] = consvar_ijk
@@ -191,11 +204,15 @@ end
 
 #======================= low-level utilities ======================#
 
-@inline function fuse(fun::Fun, outputs, locals, inputs, sph, other...) where {Fun}
+struct Fused{Fun}
+    fun::Fun
+end
+
+@inline function (fused::Fused)(outputs, locals, inputs, sph, other...)
     if hasvoid(outputs) || hasvoid(locals)
-        fuse_hasvoid(fun, outputs, locals, inputs, sph, other...)
+        fuse_hasvoid(fused.fun, outputs, locals, inputs, sph, other...)
     else
-        fuse_novoid(fun, outputs, locals, inputs, sph, other...)
+        fuse_novoid(fused.fun, outputs, locals, inputs, sph, other...)
     end
 end
 
@@ -235,40 +252,6 @@ struct Slicer <: Recurser
 end
 (s::Slicer)(x::Array{Float64,3}) = x[:, :, s.k]
 (s::Slicer)(x::Matrix{ComplexF64}) = x[:, s.k]
-
-abstract type Copier end
-@inline (cop::Copier)(x::NamedTuple{names}, y::NamedTuple{names}) where {names} =
-    cop(Tuple(x), Tuple(y))
-@inline (cop::Copier)(::Tuple{}, ::Tuple{}) = nothing
-@inline function (cop::Copier)(x::Tuple, y::Tuple)
-    xx, xxx... = x
-    yy, yyy... = y
-    cop(xx, yy)
-    cop(xxx, yyy)
-    nothing
-end
-
-struct CopyIn! <: Copier
-    k::Int
-end
-@inline (cop::CopyIn!)(lhs::Matrix{Float64}, rhs::Array{Float64,3}) =
-    copyin!(lhs, rhs, cop.k)
-@inline (cop::CopyIn!)(lhs::Vector{ComplexF64}, rhs::Matrix{ComplexF64}) =
-    copyin!(lhs, rhs, cop.k)
-@inline copyin!(lhs, rhs, k) = @inbounds for i in eachindex(lhs)
-    lhs[i] = rhs[i+(k-1)*length(lhs)]
-end
-
-struct CopyOut! <: Copier
-    k::Int
-end
-@inline (cop::CopyOut!)(lhs::Array{Float64,3}, rhs::Matrix{Float64}) =
-    copyout!(lhs, rhs, cop.k)
-@inline (cop::CopyOut!)(lhs::Matrix{ComplexF64}, rhs::Vector{ComplexF64}) =
-    copyout!(lhs, rhs, cop.k)
-@inline copyout!(lhs, rhs, k) = @inbounds for i in eachindex(rhs)
-    lhs[i+(k-1)*length(rhs)] = rhs[i]
-end
 
 function compare(result, fun)
     res = deepcopy(result)
