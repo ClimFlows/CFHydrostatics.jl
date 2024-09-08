@@ -21,9 +21,20 @@ ifvoid(::Void, y) = similar(y)
 vanleer(kind, ::HVLayout) = CFTransport.VanLeerScheme(kind, minmod_simd, 2, 2)
 vanleer(kind, ::VHLayout) = CFTransport.VanLeerScheme(kind, minmod_simd, 1, 2)
 
-flatten(x::AbstractArray, ::HVLayout{1}) = x
-flatten(x::AbstractArray, ::HVLayout{2}) = reshape(x, :, size(x, 3), size(x,4))
+# merge horizontal dimensions when there are two
+# belongs to CFDomains ?
+const AbsA{N,T} = AbstractArray{T,N}
+
+flatten(x::AbsA, ::HVLayout{1}) = x
+flatten(x::AbsA, ::VHLayout{1}) = x
+flatten(x::AbsA{3}, ::HVLayout{2}) = reshape(x, :, size(x, 3))
+flatten(x::AbsA{4}, ::HVLayout{2}) = reshape(x, :, size(x, 3), size(x,4))
+flatten(x::AbsA{3}, ::VHLayout{2}) = reshape(x, size(x, 1), :)
+flatten(x::AbsA{4}, ::VHLayout{2}) = reshape(x, size(x, 1), :, size(x,4))
+
 flatten(x::Union{Tuple, NamedTuple}, layout) = map(y->flatten(y, layout), x)
+flatten(::HVLayout) = HVLayout{1}()
+flatten(::VHLayout) = VHLayout{1}()
 
 
 absmax(x) = minimum(abs, x), maximum(abs,x)

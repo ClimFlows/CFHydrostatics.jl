@@ -1,7 +1,7 @@
 module RemapCollocated
 
-using CFTransport: remap_fluxes!, flatten
-using ..RemapHPE: vanleer, remap_density!, remap_scalar!, update_mass!
+using CFTransport: remap_fluxes!
+using ..RemapHPE: vanleer, remap_density!, remap_scalar!, update_mass!, flatten
 
 # convention:
 #      fun(non-fields, output fields..., #==# scratch #==# input fields...)

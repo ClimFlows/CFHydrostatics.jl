@@ -48,8 +48,8 @@ dstate_all(model, state) = Dynamics.tendencies!(void, void, model, state, 0.0)
 function masses(model, state)
     fac, sph = model.planet.radius^-2, model.domain.layer
     return (
-        air = synthesis_scalar!(void, fac*state.masses_spec.air, sph),
-        consvar = synthesis_scalar!(void, fac*state.masses_spec.consvar, sph),
+        air = synthesis_scalar!(void, fac*state.mass_air_spec, sph),
+        consvar = synthesis_scalar!(void, fac*state.mass_consvar_spec, sph),
     )
 end
 dmasses(model, dstate) = masses(model, dstate)
@@ -62,7 +62,7 @@ end
 
 duv(model, dstate) = uv(model, dstate)
 
-ps_spec(model, state) = (model.planet.radius^-2) * sum(state.masses_spec.air; dims = 2)
+ps_spec(model, state) = (model.planet.radius^-2) * sum(state.mass_air_spec; dims = 2)
 
 surface_pressure(model, ps_spec) =
     synthesis_scalar!(void, ps_spec[:, 1], model.domain.layer) .+ model.vcoord.ptop
@@ -134,7 +134,7 @@ function gradPhi(model, uv, geopotential)
 end
 
 gradmass(model, state) =
-    synthesis_spheroidal!(void, state.masses_spec.air, model.domain.layer)
+    synthesis_spheroidal!(void, state.mass_air_spec, model.domain.layer)
 
 Omega(vertical_velocities) = vertical_velocities.Omega
 Phi_dot(vertical_velocities) = vertical_velocities.Phi_dot
