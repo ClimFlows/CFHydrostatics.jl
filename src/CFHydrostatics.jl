@@ -50,7 +50,7 @@ include("julia/remap_HPE.jl")
 include("julia/remap_collocated.jl")
 # include("julia/remap_voronoi.jl")
 
-include("julia/ext/SHTnsSpheres_Ext.jl") # only when developing (also Project.toml)
+# include("julia/ext/SHTnsSpheres_Ext.jl") # only when developing (also Project.toml)
 
 using PackageExtensionCompat
 function __init__()
