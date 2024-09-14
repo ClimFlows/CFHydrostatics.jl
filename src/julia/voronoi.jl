@@ -26,7 +26,7 @@ function initial_HPE_VH(model, nz, sph::VoronoiSphere, case)
         ucov[k, ij] = de[ij]*(cos_e*ulon[k,ij] + sin_e*ulat[ij])
     end
 
-    return mass_air, mass_consvar, ucov
+    return (; mass_air, mass_consvar, ucov)
 end
 
 include("voronoi_diagnostics.jl")
