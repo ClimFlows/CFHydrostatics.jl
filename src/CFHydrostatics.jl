@@ -46,6 +46,8 @@ function HPE_scratch end
 function HPE_dstate end
 function HPE_remap! end
 
+include("julia/voronoi.jl")
+
 include("julia/remap_HPE.jl")
 include("julia/remap_collocated.jl")
 # include("julia/remap_voronoi.jl")
