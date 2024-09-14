@@ -2,7 +2,7 @@ module Dynamics
 
 using MutatingOrNot: void, Void, similar
 
-using ManagedLoops: @loops, @vec, no_simd
+using ManagedLoops: @with, @vec, no_simd
 using SHTnsSpheres:
     analysis_scalar!,
     synthesis_scalar!,
@@ -14,6 +14,8 @@ using SHTnsSpheres:
     shtns_alloc,
     erase,
     batch
+
+include("fused.jl")
 
 # spectral fields are suffixed with _spec
 # vector, spectral = (spheroidal, toroidal)
@@ -136,17 +138,17 @@ end
 #========== hydrostatic balance and geopotential computation ==========
 =======================================================================#
 
-function hydrostatic_pressure!(p, model, air::Array{Float64,3})
-    p = similar(air, p)
-    compute_hydrostatic_pressure(model.mgr, p, model, air)
-    return p
-end
+# Footgun: do not reuse variable names if they are used inside the let ... end block.
+# To see why, remove trailing underscores and read the error message carefully.
 
-@loops function compute_hydrostatic_pressure(_, p, model, mass)
+function hydrostatic_pressure!(p_, model, mass::Array{Float64,3})
+    # similar(x,y) allocates only if y::Void
+    p = similar(mass, p_)
+    @with model.mgr,
     let (irange, jrange) = (axes(p, 1), axes(p, 2))
         ptop, nz = model.vcoord.ptop, size(p, 3)
         half_invrad2 = model.planet.radius^-2 / 2
-        for j in jrange
+        @inbounds for j in jrange
             @vec for i in irange
                 p[i, j, nz] = ptop + half_invrad2 * mass[i, j, nz]
                 for k = nz:-1:2
@@ -156,30 +158,16 @@ end
             end
         end
     end
+    return p
 end
 
-function Bernoulli!((B, exner, consvar, Phi), (mass_air, mass_consvar, p, uv), model)
-    # similar(x,y) allocates only if y::Void
-    B = similar(p, B)
-    exner = similar(p, exner)
-    consvar = similar(p, consvar)
+function Bernoulli!((B_, exner_, consvar_, Phi_), (mass_air, mass_consvar, p, uv), model)
+    B = similar(p, B_)
+    exner = similar(p, exner_)
+    consvar = similar(p, consvar_)
+    Phi = @. Phi_ = model.Phis
 
-    Phi = @. Phi = model.Phis
-    compute_Bernoulli!(
-        model.mgr,
-        (B, exner, consvar, Phi),
-        (mass_air, mass_consvar, p, uv),
-        model,
-    )
-    return B, exner, consvar, Phi
-end
-
-@loops function compute_Bernoulli!(
-    _,
-    (B, exner, consvar, Phi),
-    (mass_air, mass_consvar, p, uv),
-    model,
-)
+    @with model.mgr,
     let (irange, jrange) = (axes(p, 1), axes(p, 2))
         ux, uy = uv.ucolat, uv.ulon
         invrad2 = model.planet.radius^-2
@@ -200,58 +188,10 @@ end
             end
         end
     end
+    return B, exner, consvar, Phi
 end
 
 #======================= low-level utilities ======================#
-
-struct Fused{Fun}
-    fun::Fun
-end
-
-@inline function (fused::Fused)(outputs, locals, inputs, sph, other...)
-    if hasvoid(outputs) || hasvoid(locals)
-        fuse_hasvoid(fused.fun, outputs, locals, inputs, sph, other...)
-    else
-        fuse_novoid(fused.fun, outputs, locals, inputs, sph, other...)
-    end
-end
-
-@inline function fuse_hasvoid(fun::Fun, outputs, locals, inputs, sph, other...) where {Fun}
-    outputs, locals = fun(outputs, locals, inputs, sph, other...)
-    local_slices = [Slicer(k)(locals) for k = 1:length(sph.ptrs)]
-    return outputs, local_slices
-end
-
-@inline function fuse_novoid(fun::Fun, outputs, locals, inputs, sph, other...) where {Fun}
-    n = size(inputs[1])[end]                # last dimension of first input array
-    batch(sph, n, 1) do sph_, thread, k, _   # let SHTnsSpheres manage threads
-        locs = locals[thread]
-        ins = Viewer(k)(inputs)
-        outs = Viewer(k)(outputs)
-        fun(outs, locs, ins, sph_, other...)
-    end
-    return outputs, locals
-end
-
-hasvoid(_) = false
-hasvoid(::Void) = true
-hasvoid(tup::NamedTuple) = any(hasvoid, tup)
-
-abstract type Recurser end
-(rec::Recurser)(x::Union{Tuple,NamedTuple}) = map(rec, x)
-(rec::Recurser)(x, y, z...) = s((x, y, z...))
-
-struct Viewer <: Recurser
-    k::Int
-end
-(s::Viewer)(a::Array{Float64,3}) = view(a, :, :, s.k)
-(s::Viewer)(a::Matrix{ComplexF64}) = view(a, :, s.k)
-
-struct Slicer <: Recurser
-    k::Int
-end
-(s::Slicer)(x::Array{Float64,3}) = x[:, :, s.k]
-(s::Slicer)(x::Matrix{ComplexF64}) = x[:, s.k]
 
 function compare(result, fun)
     res = deepcopy(result)
