@@ -15,9 +15,8 @@ diagnostics() = CookBook(;
     surface_pressure,
     temperature,
     geopotential,
-    ugradp,
-    dmass_air,
     Omega,
+    Phi_dot,
     ucov_e,
     mass_air_i,
     mass_consvar_i,
@@ -28,12 +27,14 @@ diagnostics() = CookBook(;
     temperature_i,
     geopotential_i,
     gradp_e,
-    ugradp_i,
+    gradPhi_e,
     dmass_air_i,
-    Omega_i,
+    dmass_consvar_i,
+    vertical_velocities,
 )
 
 # lon-lat diagnostics
+
 ulon(to_lonlat, ulonlat_i) = to_lonlat(ulonlat_i.ulon)
 ulat(to_lonlat, ulonlat_i) = to_lonlat(ulonlat_i.ulat)
 pressure(to_lonlat, pressure_i) = to_lonlat(pressure_i)
@@ -41,9 +42,8 @@ surface_pressure(to_lonlat, surface_pressure_i) = to_lonlat(surface_pressure_i)
 consvar(to_lonlat, consvar_i) = to_lonlat(consvar_i)
 temperature(to_lonlat, temperature_i) = to_lonlat(temperature_i)
 geopotential(to_lonlat, geopotential_i) = to_lonlat(geopotential_i)
-ugradp(to_lonlat, ugradp_i) = to_lonlat(ugradp_i)
-dmass_air(to_lonlat, dmass_air_i) = to_lonlat(dmass_air_i)
-Omega(to_lonlat, Omega_i) = to_lonlat(Omega_i)
+Omega(to_lonlat, vertical_velocities) = to_lonlat(vertical_velocities.Omega)
+Phi_dot(to_lonlat, vertical_velocities) = to_lonlat(vertical_velocities.Phi_dot)
 
 # diagnostics on native grid
 
@@ -130,23 +130,24 @@ function gradp_e(model, ucov_e, pressure_i) # 1-form, at edges
     return gradp
 end
 
-function ugradp_i(model, pressure_i, ucov_e, gradp_e) # scalar, primal mesh
-    ugradp = similar(pressure_i)
-    domain, radius = model.domain.layer, model.planet.radius
+function gradPhi_e(model, ucov_e, geopotential_i) # 1-form, at edges
+    gradPhi = similar(ucov_e)
+    left_right = model.domain.layer.edge_left_right
 
     @with model.mgr,
-    let (krange, ijrange) = axes(ugradp)
-        @inbounds for ij in ijrange
-            deg = domain.primal_deg[ij]
-            @unroll deg in 5:7 begin
-                st = dot_product(Val(deg), ij, domain, radius)
-                for k in krange
-                    ugradp[k, ij] = dot_product(Val(deg), st, k, gradp_e, ucov_e)
-                end
+    let (krange, ijrange) = axes(gradPhi)
+        for ij in ijrange
+            left, right = left_right[1, ij], left_right[2, ij]
+            @vec for k in krange
+                gradPhi[k, ij] =
+                    (
+                        (geopotential_i[k, right] + geopotential_i[k+1, right]) -
+                        (geopotential_i[k, left] + geopotential_i[k+1, left])
+                    ) / 2
             end
         end
     end
-    return ugradp
+    return gradPhi
 end
 
 function dmass_i(model, mass_i, ucov_e) # scalar, primal mesh
@@ -163,8 +164,7 @@ function dmass_i(model, mass_i, ucov_e) # scalar, primal mesh
         end
     end
 
-    @with model.mgr,
-    let (krange, ijrange) = axes(dmass)
+    @with model.mgr, let (krange, ijrange) = axes(dmass)
         @inbounds for ij in ijrange
             deg = domain.primal_deg[ij]
             @unroll deg in 5:7 begin
@@ -179,47 +179,61 @@ function dmass_i(model, mass_i, ucov_e) # scalar, primal mesh
     return dmass
 end
 
-function Omega_i(model, ugradp_i, dmass_air_i)    #= pressure_i, ugradPhi_i, mass_air_i, mass_consvar_i, dmass_consvar_i =#
-
+function vertical_velocities(
+    model,
+    ucov_e,
+    gradp_e,
+    gradPhi_e,
+    dmass_air_i,
+    dmass_consvar_i,
+    pressure_i,
+    mass_air_i,
+    mass_consvar_i,
+)
     # dmass is a scalar (O-form in kg/m²/s)
     # consvar is a scalar (O-form in kg/m²/s)
-    Omega, Phi_dot = similar(ugradp_i), similar(ugradp_i)
+    Omega, Phi_dot = similar(mass_air_i), similar(mass_air_i)
     dp_mid = Phi_dot # use Phi_dot as buffer for dp_mid
 
+    volume = model.gas(:p, :consvar).volume_functions
+    domain = model.domain.layer
+    radius = model.planet.radius
+
     #    @with model.mgr,
-    let ijrange = axes(ugradp_i, 2)
-        nz = size(ugradp_i, 1)
-        volume = model.gas(:p, :consvar).volume_functions
-
+    let ijrange = axes(Omega, 2)
+        nz = size(Omega, 1)
         for ij in ijrange
-            # top_down: dp, Omega
-            dp_top = zero(Omega[1, ij])
-            for k = nz:-1:1
-                dp_bot = dp_top + dmass_air_i[k, ij]
-                dp_mid[k, ij] = (dp_top + dp_bot) / 2
-                Omega[k, ij] = dp_mid[k, ij] + ugradp_i[k, ij]
-                dp_top = dp_bot
+            deg = domain.primal_deg[ij]
+            @unroll deg in 5:7 begin
+                stencil = dot_product(Val(deg), ij, domain, radius)
+                # top_down: dp, Omega
+                dp_top = zero(Omega[1, ij])
+                for k = nz:-1:1
+                    dp_bot = dp_top + dmass_air_i[k, ij]
+                    dp_mid[k, ij] = (dp_top + dp_bot) / 2
+                    ugradp_ijk = dot_product(Val(deg), stencil, k, ucov_e, gradp_e)
+                    Omega[k, ij] = dp_mid[k, ij] + ugradp_ijk
+                    dp_top = dp_bot
+                end
+                # bottom-up: Phi_dot
+                dPhi = zero(Phi_dot[1, ij])
+                for k = 1:nz
+                    consvar = mass_consvar_i[k, ij] / mass_air_i[k, ij]
+                    mass_dconsvar = dmass_consvar_i[k, ij] - consvar * dmass_air_i[k, ij]
+                    v, dv_dp, dv_dconsvar = volume(pressure_i[k, ij], consvar)
+                    ddPhi =
+                        v * dmass_air_i[k, ij] +
+                        dv_dconsvar * mass_dconsvar +
+                        dv_dp * mass_air_i[k, ij] * dp_mid[k, ij]
+                    # here we take care to write into Phi_dot *after* reading from dp_mid
+                    ugradPhi_ijk = dot_product(Val(deg), stencil, k, ucov_e, gradPhi_e)
+                    Phi_dot[k, ij] = (dPhi + ddPhi / 2) + ugradPhi_ijk
+                    dPhi += ddPhi
+                end
             end
-            #=
-            # bottom-up: Phi_dot
-            dPhi = zero(Phi_dot[1, ij])
-            for k = 1:nz
-                consvar = mass_consvar_i[k, ij] / mass_air_i[k, ij]
-                mass_dconsvar = dmass_consvar_i[k, ij] - consvar * dmass_air_i[k, ij]
-                v, dv_dp, dv_dconsvar = volume(pressure_i[k, ij], consvar)
-                ddPhi =
-                    v * dmass_air[k, ij] +
-                    dv_dconsvar * mass_dconsvar +
-                    dv_dp * mass_air[k, ij] * dp_mid[k, ij]
-                # here we take care to write into Phi_dot *after* reading from dp_mid
-                Phi_dot[k, ij] = (dPhi + ddPhi / 2) + ugradPhi_i[k, ij]
-                dPhi += ddPhi
-            end
-            =#
         end
-
     end
-    return Omega
+    return (; Omega, Phi_dot)
 end
 
 end # module
