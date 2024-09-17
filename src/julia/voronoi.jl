@@ -31,6 +31,7 @@ end
 
 include("voronoi_stencils.jl")
 include("voronoi_diagnostics.jl")
+include("voronoi_dynamics.jl")
 
 HPE_diagnostics(_, ::VoronoiSphere) = Diagnostics.diagnostics()
 

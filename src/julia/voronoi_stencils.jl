@@ -34,11 +34,9 @@ end
 
 #======================= centered flux ======================#
 
-# le_de non-dimensional
-# ucov in m^2/s
-# mass in kg/m² (rho.dz)
+# le_de non-dimensional, ucov in m^2/s, mass in kg/m² (rho.dz)
 # => this flux in kg/s
-# rescaled to kg/s/m^2 by caller using metric factor
+# must be rescaled to kg/s/m^2 by caller using metric factor
 # => div(flux) in kg/m^2/s
 
 # the factor 1/2 for the centered average is incorporated into le_de
