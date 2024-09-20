@@ -15,6 +15,8 @@ using SHTnsSpheres:
     erase,
     batch
 
+using CFHydrostatics: debug_flags
+
 include("fused.jl")
 
 # spectral fields are suffixed with _spec
@@ -32,7 +34,7 @@ function tendencies!(dstate, scratch, model, state, t)
     (; mass_air_spec, mass_consvar_spec, uv_spec) = state
     dmass_air_spec, dmass_consvar_spec, duv_spec = dstate
 
-    sph, invrad2, fcov = model.domain.layer, model.planet.radius^-2, model.fcov
+    sph, metric, fcov = model.domain.layer, model.planet.radius^-2, model.fcov
 
     fused_mass_budgets! = Fused(mass_budgets!)
     fused_curl_form! = Fused(curl_form!)
@@ -45,7 +47,7 @@ function tendencies!(dstate, scratch, model, state, t)
             (; mass_air_spec, mass_consvar_spec, uv_spec),
             sph,
             sph.laplace,
-            invrad2,
+            metric,
         )
 
     # hydrostatic balance, geopotential, exner function
@@ -60,7 +62,7 @@ function tendencies!(dstate, scratch, model, state, t)
         (; exner, consvar, B, uv_spec, uv),
         sph,
         sph.laplace,
-        invrad2,
+        metric,
         fcov,
     )
 
@@ -75,7 +77,7 @@ end
      uv is the momentum 1-form = a*(u,v)
      gh is the 2-form a²Φ
      divergence! is relative to the unit sphere
-       => scale flux by radius^-2
+       => scale flux by contravariant metric factor radius^-2
 ========================================================================#
 
 function mass_budgets!(outputs, locals, inputs, sph, laplace, factor)
@@ -109,26 +111,29 @@ end
      uv is momentum = a*(u,v)
      curl! is relative to the unit sphere
      fcov, zeta and gh are the 2-forms a²f, a²ζ, a²Φ
-       => scale B and qflux by radius^-2
+       => scale B and qflux by contravariant metric factor radius^-2
 ==================================================================#
 
-function curl_form!(outputs, locals, inputs, sph, laplace, invrad2, fcov)
+function curl_form!(outputs, locals, inputs, sph, laplace, metric, fcov)
     (; exner, consvar, B, uv_spec, uv) = inputs
     (; duv_spec) = outputs
     (; qflux_spec, B_spec, fx, fy, zeta, zeta_spec, grad_exner, exner_spec) = locals
+
+    fl = debug_flags()
 
     exner_spec = analysis_scalar!(exner_spec, erase(exner), sph)
     (gradx, grady) = grad_exner = synthesis_spheroidal!(grad_exner, exner_spec, sph)
     zeta_spec = @. zeta_spec = -laplace * uv_spec.toroidal # curl
     zeta = synthesis_scalar!(zeta, zeta_spec, sph)
     (ux, uy) = uv
-    fx = @. fx = invrad2 * (zeta + fcov) * uy - consvar * gradx
-    fy = @. fy = -invrad2 * (zeta + fcov) * ux - consvar * grady
+    fx = @. fx =  (fl.qU) * metric * (zeta + fcov) * uy - (fl.CgradExner)*consvar * gradx
+    fy = @. fy = -(fl.qU) * metric * (zeta + fcov) * ux - (fl.CgradExner)*consvar * grady
+
     qflux_spec = analysis_vector!(qflux_spec, erase(vector_spat(fx, fy)), sph)
 
     B_spec = analysis_scalar!(B_spec, erase(B), sph)
     duv_spec = vector_spec(
-        (@. duv_spec.spheroidal = qflux_spec.spheroidal - B_spec),
+        (@. duv_spec.spheroidal = qflux_spec.spheroidal - (fl.gradB)*B_spec),
         (@. duv_spec.toroidal = qflux_spec.toroidal),
     )
     return (; duv_spec),
@@ -138,8 +143,8 @@ end
 #========== hydrostatic balance and geopotential computation ==========
 =======================================================================#
 
-# Footgun: do not reuse variable names if they are used inside the let ... end block.
-# To see why, remove trailing underscores and read the error message carefully.
+# Footgun: do not reassign to variable names if they are used inside the let ... end block, e.g.
+#   p = similar(mass, p) # footgun !
 
 function hydrostatic_pressure!(p_, model, mass::Array{Float64,3})
     # similar(x,y) allocates only if y::Void
@@ -147,13 +152,13 @@ function hydrostatic_pressure!(p_, model, mass::Array{Float64,3})
     @with model.mgr,
     let (irange, jrange) = (axes(p, 1), axes(p, 2))
         ptop, nz = model.vcoord.ptop, size(p, 3)
-        half_invrad2 = model.planet.radius^-2 / 2
+        half_metric = model.planet.radius^-2 / 2
         @inbounds for j in jrange
             @vec for i in irange
-                p[i, j, nz] = ptop + half_invrad2 * mass[i, j, nz]
+                p[i, j, nz] = ptop + half_metric * mass[i, j, nz]
                 for k = nz:-1:2
                     p[i, j, k-1] =
-                        p[i, j, k] + half_invrad2 * (mass[i, j, k] + mass[i, j, k-1])
+                        p[i, j, k] + half_metric * (mass[i, j, k] + mass[i, j, k-1])
                 end
             end
         end
@@ -169,18 +174,19 @@ function Bernoulli!((B_, exner_, consvar_, Phi_), (mass_air, mass_consvar, p, uv
 
     @with model.mgr,
     let (irange, jrange) = (axes(p, 1), axes(p, 2))
+        fl = debug_flags()
         ux, uy = uv.ucolat, uv.ulon
-        invrad2 = model.planet.radius^-2
+        metric = model.planet.radius^-2
         Exner = model.gas(:p, :consvar).exner_functions
         @inbounds for j in jrange
             for k in axes(p, 3)
                 @vec for i in irange
-                    ke = (invrad2 / 2) * (ux[i, j, k]^2 + uy[i, j, k]^2)
+                    ke = (metric / 2) * (ux[i, j, k]^2 + uy[i, j, k]^2)
                     consvar_ijk = mass_consvar[i, j, k] / mass_air[i, j, k]
                     h, v, exner_ijk = Exner(p[i, j, k], consvar_ijk)
-                    Phi_up = Phi[i, j] + invrad2 * mass_air[i, j, k] * v # geopotential at upper interface
+                    Phi_up = Phi[i, j] + metric * mass_air[i, j, k] * v # geopotential at upper interface
                     B[i, j, k] =
-                        ke + (Phi_up + Phi[i, j]) / 2 + (h - consvar_ijk * exner_ijk)
+                        (fl.ke)*ke + (fl.Phi)*(Phi_up + Phi[i, j]) / 2 + (h - consvar_ijk * exner_ijk)
                     consvar[i, j, k] = consvar_ijk
                     exner[i, j, k] = exner_ijk
                     Phi[i, j] = Phi_up

@@ -1,11 +1,11 @@
 module Diagnostics
 
 using CookBooks: CookBook
-using CFDomains: primal_lonlat_from_cov!
-using CFPlanets: lonlat_from_cov
+using CFDomains: Stencils, primal_lonlat_from_cov!
+using CFPlanets
 using ManagedLoops: @with, @vec, @unroll
-
-using ..Stencils: dot_product, centered_flux, divergence
+using MutatingOrNot: void
+using ..Dynamics: tendencies_HV!
 
 diagnostics() = CookBook(;
     ulon,
@@ -30,7 +30,12 @@ diagnostics() = CookBook(;
     gradPhi_e,
     dmass_air_i,
     dmass_consvar_i,
+    lonlat_from_cov,
     vertical_velocities,
+    tendencies,
+    dulonlat_i,
+    dulon,
+    dulat
 )
 
 # lon-lat diagnostics
@@ -51,6 +56,8 @@ ucov_e(state) = state.ucov
 mass_air_i(model, state) = rescale_mass(model, state.mass_air)
 mass_consvar_i(model, state) = rescale_mass(model, state.mass_consvar)
 rescale_mass(model, mass) = (model.planet.radius^-2) * mass
+
+ulonlat_i(ucov_e, lonlat_from_cov) = lonlat_from_cov(ucov_e)
 
 surface_pressure_i(model, mass_air_i) =
     model.vcoord.ptop .+ reshape(sum(mass_air_i; dims = 1), :)
@@ -79,23 +86,27 @@ function pressure_i(model, mass_air_i)
     return p
 end
 
-function ulonlat_i(model, state)
-    domain, planet, ucov_e = model.domain.layer, model.planet, state.ucov
+function lonlat_from_cov(model, state)
+    domain, planet = model.domain.layer, model.planet
     lon, lat = domain.lon_i, domain.lat_i
     coslon, sinlon = cos.(lon), sin.(lon)
     coslat, sinlat = cos.(lat), sin.(lat)
-    ulon, ulat = similar(state.mass_air), similar(state.mass_air)
-    args = domain.primal_deg,
-    domain.primal_edge,
-    domain.primal_perot_cov,
-    coslon,
-    sinlon,
-    coslat,
-    sinlat
-    primal_lonlat_from_cov!(ulon, ulat, ucov_e, args...) do ij, ulon_ij, ulat_ij
-        lonlat_from_cov(ulon_ij, ulat_ij, lon[ij], lat[ij], planet)
+    args = (
+        domain.primal_deg,
+        domain.primal_edge,
+        domain.primal_perot_cov,
+        coslon,
+        sinlon,
+        coslat,
+        sinlat,
+    )
+    function work(ucov)
+        ulon, ulat = similar(state.mass_air), similar(state.mass_air)
+        primal_lonlat_from_cov!(ulon, ulat, ucov, args...) do ij, ulon_ij, ulat_ij
+            CFPlanets.lonlat_from_cov(ulon_ij, ulat_ij, lon[ij], lat[ij], planet)
+        end
+        return (; ulon, ulat)
     end
-    return (; ulon, ulat)
 end
 
 function geopotential_i(model, mass_air_i, mass_consvar_i, pressure_i)
@@ -154,12 +165,11 @@ function dmass_i(model, mass_i, ucov_e) # scalar, primal mesh
     flux, dmass = similar(ucov_e), similar(mass_i)
     domain, inv_rad2 = model.domain.layer, model.planet.radius^-2
 
-    @with model.mgr,
-    let (krange, ijrange) = axes(flux)
+    @with model.mgr, let (krange, ijrange) = axes(flux)
         @inbounds for ij in ijrange
-            st = centered_flux(ij, domain)
+            flux_ij = Stencils.centered_flux(domain, ij)
             for k in krange
-                flux[k, ij] = inv_rad2 * centered_flux(st, k, mass_i, ucov_e)
+                flux[k, ij] = inv_rad2 * flux_ij(mass_i, ucov_e, k)
             end
         end
     end
@@ -168,9 +178,9 @@ function dmass_i(model, mass_i, ucov_e) # scalar, primal mesh
         @inbounds for ij in ijrange
             deg = domain.primal_deg[ij]
             @unroll deg in 5:7 begin
-                st = divergence(Val(deg), ij, domain)
+                dvg = Stencils.divergence(domain, ij, Val(deg))
                 for k in krange
-                    dmass[k, ij] = -divergence(Val(deg), st, k, flux)
+                    dmass[k, ij] = -dvg(flux, k)
                 end
             end
         end
@@ -197,7 +207,7 @@ function vertical_velocities(
 
     volume = model.gas(:p, :consvar).volume_functions
     domain = model.domain.layer
-    radius = model.planet.radius
+    metric = model.planet.radius^-2 # contravariant metric tensor (diagonal)
 
     #    @with model.mgr,
     let ijrange = axes(Omega, 2)
@@ -205,13 +215,13 @@ function vertical_velocities(
         for ij in ijrange
             deg = domain.primal_deg[ij]
             @unroll deg in 5:7 begin
-                stencil = dot_product(Val(deg), ij, domain, radius)
+                dot_product = Stencils.dot_product(domain, ij, Val(deg))
                 # top_down: dp, Omega
                 dp_top = zero(Omega[1, ij])
                 for k = nz:-1:1
                     dp_bot = dp_top + dmass_air_i[k, ij]
                     dp_mid[k, ij] = (dp_top + dp_bot) / 2
-                    ugradp_ijk = dot_product(Val(deg), stencil, k, ucov_e, gradp_e)
+                    ugradp_ijk = metric * dot_product(ucov_e, gradp_e, k)
                     Omega[k, ij] = dp_mid[k, ij] + ugradp_ijk
                     dp_top = dp_bot
                 end
@@ -226,7 +236,7 @@ function vertical_velocities(
                         dv_dconsvar * mass_dconsvar +
                         dv_dp * mass_air_i[k, ij] * dp_mid[k, ij]
                     # here we take care to write into Phi_dot *after* reading from dp_mid
-                    ugradPhi_ijk = dot_product(Val(deg), stencil, k, ucov_e, gradPhi_e)
+                    ugradPhi_ijk = metric * dot_product(ucov_e, gradPhi_e, k)
                     Phi_dot[k, ij] = (dPhi + ddPhi / 2) + ugradPhi_ijk
                     dPhi += ddPhi
                 end
@@ -235,5 +245,14 @@ function vertical_velocities(
     end
     return (; Omega, Phi_dot)
 end
+
+#================= tendencies ===================#
+
+tendencies(model, state) =
+    tendencies_HV!(void, void, model, state, nothing)
+
+dulonlat_i(tendencies, lonlat_from_cov) = lonlat_from_cov(tendencies[1].ucov)
+dulon(dulonlat_i, to_lonlat) = to_lonlat(dulonlat_i.ulon)
+dulat(dulonlat_i, to_lonlat) = to_lonlat(dulonlat_i.ulat)
 
 end # module

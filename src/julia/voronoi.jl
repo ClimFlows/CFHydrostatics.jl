@@ -29,9 +29,9 @@ function initial_HPE_VH(model, nz, sph::VoronoiSphere, case)
     return (; mass_air, mass_consvar, ucov)
 end
 
-include("voronoi_stencils.jl")
-include("voronoi_diagnostics.jl")
+include("voronoi_stencils.jl") # used by diagnostics but must be removed, ultimately
 include("voronoi_dynamics.jl")
+include("voronoi_diagnostics.jl")
 
 HPE_diagnostics(_, ::VoronoiSphere) = Diagnostics.diagnostics()
 
