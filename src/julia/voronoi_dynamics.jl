@@ -111,7 +111,7 @@ function mass_budget!(
     dmass_air = similar!(dmass_air_, mass_air)
     dmass_consvar = similar!(dmass_consvar_, mass_consvar)
     flux_air = similar!(flux_air_, ucov)
-    flux_consvar = similar!(flux_air_, ucov)
+    flux_consvar = similar!(flux_consvar_, ucov)
 
     vsphere, metric = model.domain.layer, model.planet.radius^-2
 
@@ -156,21 +156,21 @@ function hydrostatic_balance!(Phi_, p_, model, mass_air, consvar)
 
     ptop, nz = model.vcoord.ptop, size(p, 1)
     Phis = model.Phis # surface geopotential
-    half_metric = (model.planet.radius^-2) / 2
+    metric = model.planet.radius^-2
     vol = model.gas(:p, :consvar).specific_volume
 
     @with model.mgr, let ijrange = 1:size(p, 2)
         @inbounds for ij in ijrange
             p_top = ptop
             for k = nz:-1:1
-                p_bot = p_top + half_metric * mass_air[k, ij]
+                p_bot = p_top + metric * mass_air[k, ij]
                 p[k, ij] = (p_bot + p_top) / 2
                 p_top = p_bot
             end
             Phi_bot = Phis[ij]
             for k in axes(Phi, 1)
                 v = vol(p[k, ij], consvar[k, ij])
-                Phi_top = Phi_bot + half_metric * mass_air[k, ij] * v
+                Phi_top = Phi_bot + metric * mass_air[k, ij] * v
                 Phi[k, ij] = (Phi_top + Phi_bot) / 2
                 Phi_bot = Phi_top
             end
@@ -185,7 +185,7 @@ function hydrostatic_balance_HV!(Phi_, p_, model, mass_air, consvar)
 
     ptop, nz = model.vcoord.ptop, size(p, 2)
     Phis = model.Phis # surface geopotential
-    half_metric = (model.planet.radius^-2) / 2
+    metric = model.planet.radius^-2
     vol = model.gas(:p, :consvar).specific_volume
 
     @with model.mgr, let ijrange = axes(p, 1)
@@ -193,14 +193,14 @@ function hydrostatic_balance_HV!(Phi_, p_, model, mass_air, consvar)
             @vec for ij in ijrange
                 p_top = ptop
                 for k = nz:-1:1
-                    p_bot = p_top + half_metric * mass_air[ij, k]
+                    p_bot = p_top + metric * mass_air[ij, k]
                     p[ij, k] = (p_bot + p_top) / 2
                     p_top = p_bot
                 end
                 Phi_bot = Phis[ij]
                 for k in axes(Phi, 2)
                     v = vol(p[ij, k], consvar[ij, k])
-                    Phi_top = Phi_bot + half_metric * mass_air[ij, k] * v
+                    Phi_top = Phi_bot + metric * mass_air[ij, k] * v
                     Phi[ij, k] = (Phi_top + Phi_bot) / 2
                     Phi_bot = Phi_top
                 end

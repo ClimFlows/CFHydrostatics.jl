@@ -26,6 +26,7 @@ diagnostics() = CookBook(;
     consvar_i,
     temperature_i,
     geopotential_i,
+    kinetic_energy_i,
     gradp_e,
     gradPhi_e,
     dmass_air_i,
@@ -126,6 +127,26 @@ function geopotential_i(model, mass_air_i, mass_consvar_i, pressure_i)
     return Phi
 end
 
+function kinetic_energy_i(model, ucov_e, mass_air_i)
+    ke = similar(mass_air_i)
+    domain = model.domain.layer
+    half_metric = (model.planet.radius^-2)/2
+
+    @with model.mgr,
+    let (krange, ijrange) = axes(ke)
+        for ij in ijrange
+            deg = domain.primal_deg[ij]
+            @unroll deg in 5:7 begin
+                dot_product = Stencils.dot_product(domain, ij, Val(deg))
+                @vec for k in krange
+                    ke[k, ij] = half_metric * dot_product(ucov_e, ucov_e, k)
+                end
+            end
+        end
+    end
+    return ke
+end
+
 function gradp_e(model, ucov_e, pressure_i) # 1-form, at edges
     gradp = similar(ucov_e)
     left_right = model.domain.layer.edge_left_right
@@ -209,7 +230,7 @@ function vertical_velocities(
     domain = model.domain.layer
     metric = model.planet.radius^-2 # contravariant metric tensor (diagonal)
 
-    #    @with model.mgr,
+    @with model.mgr,
     let ijrange = axes(Omega, 2)
         nz = size(Omega, 1)
         for ij in ijrange
