@@ -1,8 +1,8 @@
 module Dynamics
 
-using MutatingOrNot: void, Void, similar
+using MutatingOrNot: void, Void
 
-using ManagedLoops: @loops, @vec, no_simd
+using ManagedLoops: @with, @vec, no_simd
 using SHTnsSpheres:
     analysis_scalar!,
     synthesis_scalar!,
@@ -14,6 +14,14 @@ using SHTnsSpheres:
     shtns_alloc,
     erase,
     batch
+
+using CFHydrostatics: debug_flags
+
+# similar!(x,y) allocates only if x::Void
+similar!(::Void, y) = similar(y)
+similar!(x, y) = x
+
+include("fused.jl")
 
 # spectral fields are suffixed with _spec
 # vector, spectral = (spheroidal, toroidal)
@@ -30,7 +38,7 @@ function tendencies!(dstate, scratch, model, state, t)
     (; mass_air_spec, mass_consvar_spec, uv_spec) = state
     dmass_air_spec, dmass_consvar_spec, duv_spec = dstate
 
-    sph, invrad2, fcov = model.domain.layer, model.planet.radius^-2, model.fcov
+    sph, metric, fcov = model.domain.layer, model.planet.radius^-2, model.fcov
 
     fused_mass_budgets! = Fused(mass_budgets!)
     fused_curl_form! = Fused(curl_form!)
@@ -43,7 +51,7 @@ function tendencies!(dstate, scratch, model, state, t)
             (; mass_air_spec, mass_consvar_spec, uv_spec),
             sph,
             sph.laplace,
-            invrad2,
+            metric,
         )
 
     # hydrostatic balance, geopotential, exner function
@@ -58,7 +66,7 @@ function tendencies!(dstate, scratch, model, state, t)
         (; exner, consvar, B, uv_spec, uv),
         sph,
         sph.laplace,
-        invrad2,
+        metric,
         fcov,
     )
 
@@ -73,7 +81,7 @@ end
      uv is the momentum 1-form = a*(u,v)
      gh is the 2-form a²Φ
      divergence! is relative to the unit sphere
-       => scale flux by radius^-2
+       => scale flux by contravariant metric factor radius^-2
 ========================================================================#
 
 function mass_budgets!(outputs, locals, inputs, sph, laplace, factor)
@@ -107,26 +115,29 @@ end
      uv is momentum = a*(u,v)
      curl! is relative to the unit sphere
      fcov, zeta and gh are the 2-forms a²f, a²ζ, a²Φ
-       => scale B and qflux by radius^-2
+       => scale B and qflux by contravariant metric factor radius^-2
 ==================================================================#
 
-function curl_form!(outputs, locals, inputs, sph, laplace, invrad2, fcov)
+function curl_form!(outputs, locals, inputs, sph, laplace, metric, fcov)
     (; exner, consvar, B, uv_spec, uv) = inputs
     (; duv_spec) = outputs
     (; qflux_spec, B_spec, fx, fy, zeta, zeta_spec, grad_exner, exner_spec) = locals
+
+    fl = debug_flags()
 
     exner_spec = analysis_scalar!(exner_spec, erase(exner), sph)
     (gradx, grady) = grad_exner = synthesis_spheroidal!(grad_exner, exner_spec, sph)
     zeta_spec = @. zeta_spec = -laplace * uv_spec.toroidal # curl
     zeta = synthesis_scalar!(zeta, zeta_spec, sph)
     (ux, uy) = uv
-    fx = @. fx = invrad2 * (zeta + fcov) * uy - consvar * gradx
-    fy = @. fy = -invrad2 * (zeta + fcov) * ux - consvar * grady
+    fx = @. fx =  (fl.qU) * metric * (zeta + fcov) * uy - (fl.CgradExner)*consvar * gradx
+    fy = @. fy = -(fl.qU) * metric * (zeta + fcov) * ux - (fl.CgradExner)*consvar * grady
+
     qflux_spec = analysis_vector!(qflux_spec, erase(vector_spat(fx, fy)), sph)
 
     B_spec = analysis_scalar!(B_spec, erase(B), sph)
     duv_spec = vector_spec(
-        (@. duv_spec.spheroidal = qflux_spec.spheroidal - B_spec),
+        (@. duv_spec.spheroidal = qflux_spec.spheroidal - (fl.gradB)*B_spec),
         (@. duv_spec.toroidal = qflux_spec.toroidal),
     )
     return (; duv_spec),
@@ -136,63 +147,49 @@ end
 #========== hydrostatic balance and geopotential computation ==========
 =======================================================================#
 
-function hydrostatic_pressure!(p, model, air::Array{Float64,3})
-    p = similar(air, p)
-    compute_hydrostatic_pressure(model.mgr, p, model, air)
-    return p
-end
+# Footgun: do not reassign to variable names if they are used inside the let ... end block, e.g.
+#   p = similar!(p, mass)
 
-@loops function compute_hydrostatic_pressure(_, p, model, mass)
+function hydrostatic_pressure!(p_, model, mass::Array{Float64,3})
+    p = similar!(p_, mass)
+    @with model.mgr,
     let (irange, jrange) = (axes(p, 1), axes(p, 2))
         ptop, nz = model.vcoord.ptop, size(p, 3)
-        half_invrad2 = model.planet.radius^-2 / 2
-        for j in jrange
+        half_metric = model.planet.radius^-2 / 2
+        @inbounds for j in jrange
             @vec for i in irange
-                p[i, j, nz] = ptop + half_invrad2 * mass[i, j, nz]
+                p[i, j, nz] = ptop + half_metric * mass[i, j, nz]
                 for k = nz:-1:2
                     p[i, j, k-1] =
-                        p[i, j, k] + half_invrad2 * (mass[i, j, k] + mass[i, j, k-1])
+                        p[i, j, k] + half_metric * (mass[i, j, k] + mass[i, j, k-1])
                 end
             end
         end
     end
+    return p
 end
 
-function Bernoulli!((B, exner, consvar, Phi), (mass_air, mass_consvar, p, uv), model)
-    # similar(x,y) allocates only if y::Void
-    B = similar(p, B)
-    exner = similar(p, exner)
-    consvar = similar(p, consvar)
+function Bernoulli!((B_, exner_, consvar_, Phi_), (mass_air, mass_consvar, p, uv), model)
+    B = similar!(B_, p)
+    exner = similar!(exner_, p)
+    consvar = similar!(consvar_, p)
+    Phi = @. Phi_ = model.Phis
 
-    Phi = @. Phi = model.Phis
-    compute_Bernoulli!(
-        model.mgr,
-        (B, exner, consvar, Phi),
-        (mass_air, mass_consvar, p, uv),
-        model,
-    )
-    return B, exner, consvar, Phi
-end
-
-@loops function compute_Bernoulli!(
-    _,
-    (B, exner, consvar, Phi),
-    (mass_air, mass_consvar, p, uv),
-    model,
-)
+    @with model.mgr,
     let (irange, jrange) = (axes(p, 1), axes(p, 2))
+        fl = debug_flags()
         ux, uy = uv.ucolat, uv.ulon
-        invrad2 = model.planet.radius^-2
+        metric = model.planet.radius^-2
         Exner = model.gas(:p, :consvar).exner_functions
         @inbounds for j in jrange
             for k in axes(p, 3)
                 @vec for i in irange
-                    ke = (invrad2 / 2) * (ux[i, j, k]^2 + uy[i, j, k]^2)
+                    ke = (metric / 2) * (ux[i, j, k]^2 + uy[i, j, k]^2)
                     consvar_ijk = mass_consvar[i, j, k] / mass_air[i, j, k]
                     h, v, exner_ijk = Exner(p[i, j, k], consvar_ijk)
-                    Phi_up = Phi[i, j] + invrad2 * mass_air[i, j, k] * v # geopotential at upper interface
+                    Phi_up = Phi[i, j] + metric * mass_air[i, j, k] * v # geopotential at upper interface
                     B[i, j, k] =
-                        ke + (Phi_up + Phi[i, j]) / 2 + (h - consvar_ijk * exner_ijk)
+                        (fl.ke)*ke + (fl.Phi)*(Phi_up + Phi[i, j]) / 2 + (h - consvar_ijk * exner_ijk)
                     consvar[i, j, k] = consvar_ijk
                     exner[i, j, k] = exner_ijk
                     Phi[i, j] = Phi_up
@@ -200,58 +197,10 @@ end
             end
         end
     end
+    return B, exner, consvar, Phi
 end
 
 #======================= low-level utilities ======================#
-
-struct Fused{Fun}
-    fun::Fun
-end
-
-@inline function (fused::Fused)(outputs, locals, inputs, sph, other...)
-    if hasvoid(outputs) || hasvoid(locals)
-        fuse_hasvoid(fused.fun, outputs, locals, inputs, sph, other...)
-    else
-        fuse_novoid(fused.fun, outputs, locals, inputs, sph, other...)
-    end
-end
-
-@inline function fuse_hasvoid(fun::Fun, outputs, locals, inputs, sph, other...) where {Fun}
-    outputs, locals = fun(outputs, locals, inputs, sph, other...)
-    local_slices = [Slicer(k)(locals) for k = 1:length(sph.ptrs)]
-    return outputs, local_slices
-end
-
-@inline function fuse_novoid(fun::Fun, outputs, locals, inputs, sph, other...) where {Fun}
-    n = size(inputs[1])[end]                # last dimension of first input array
-    batch(sph, n, 1) do sph_, thread, k, _   # let SHTnsSpheres manage threads
-        locs = locals[thread]
-        ins = Viewer(k)(inputs)
-        outs = Viewer(k)(outputs)
-        fun(outs, locs, ins, sph_, other...)
-    end
-    return outputs, locals
-end
-
-hasvoid(_) = false
-hasvoid(::Void) = true
-hasvoid(tup::NamedTuple) = any(hasvoid, tup)
-
-abstract type Recurser end
-(rec::Recurser)(x::Union{Tuple,NamedTuple}) = map(rec, x)
-(rec::Recurser)(x, y, z...) = s((x, y, z...))
-
-struct Viewer <: Recurser
-    k::Int
-end
-(s::Viewer)(a::Array{Float64,3}) = view(a, :, :, s.k)
-(s::Viewer)(a::Matrix{ComplexF64}) = view(a, :, s.k)
-
-struct Slicer <: Recurser
-    k::Int
-end
-(s::Slicer)(x::Array{Float64,3}) = x[:, :, s.k]
-(s::Slicer)(x::Matrix{ComplexF64}) = x[:, s.k]
 
 function compare(result, fun)
     res = deepcopy(result)

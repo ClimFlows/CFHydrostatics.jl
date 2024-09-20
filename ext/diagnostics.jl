@@ -29,6 +29,8 @@ diagnostics() = CookBook(;
     masses,
     dmasses,
     duv,
+    dulon,
+    dulat,
     # intermediate computations
     dstate,
     ps_spec,
@@ -61,6 +63,8 @@ function uv(model, state)
 end
 
 duv(model, dstate) = uv(model, dstate)
+dulon(duv) = duv.ulon
+dulat(duv) = -duv.ucolat
 
 ps_spec(model, state) = (model.planet.radius^-2) * sum(state.mass_air_spec; dims = 2)
 

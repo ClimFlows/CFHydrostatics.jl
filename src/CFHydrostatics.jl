@@ -16,6 +16,9 @@ struct HPE{F, Manager, Coord, Domain, Fluid, TwoDimScalar}
     Phis::TwoDimScalar # surface geopotential
 end
 
+# override this function and set one of these flags to zero to debug the computation of ducov/dt
+debug_flags() = (ke=1, Phi=1, gradB=1, CgradExner=1, qU=1)
+
 include("julia/initialize.jl")
 
 """
@@ -45,6 +48,8 @@ function HPE_tendencies! end
 function HPE_scratch end
 function HPE_dstate end
 function HPE_remap! end
+
+include("julia/voronoi.jl")
 
 include("julia/remap_HPE.jl")
 include("julia/remap_collocated.jl")
