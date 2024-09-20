@@ -21,10 +21,10 @@ SHTnsSpheres = "9e5c175a-5132-4517-85a1-2957ec255f89"
 SHTnsSpheres_Ext = ["SHTnsSpheres"]
 
 [compat]
-CFDomains = "0.1.6, 0.2"
-CFTransport = "0.1.1"
+CFDomains = "0.2.2"
+CFTransport = "0.1.3"
 ClimFluids = "0.1.2"
-ManagedLoops = "0.1.6"
+ManagedLoops = "0.1.8"
 MutatingOrNot = "0.1.2"
 PackageExtensionCompat = "1"
 SHTnsSpheres = "0.2.8"
