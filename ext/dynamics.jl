@@ -1,6 +1,6 @@
 module Dynamics
 
-using MutatingOrNot: void, Void, similar
+using MutatingOrNot: void, Void
 
 using ManagedLoops: @with, @vec, no_simd
 using SHTnsSpheres:
@@ -16,6 +16,10 @@ using SHTnsSpheres:
     batch
 
 using CFHydrostatics: debug_flags
+
+# similar!(x,y) allocates only if x::Void
+similar!(::Void, y) = similar(y)
+similar!(x, y) = x
 
 include("fused.jl")
 
@@ -144,11 +148,10 @@ end
 =======================================================================#
 
 # Footgun: do not reassign to variable names if they are used inside the let ... end block, e.g.
-#   p = similar(mass, p) # footgun !
+#   p = similar!(p, mass)
 
 function hydrostatic_pressure!(p_, model, mass::Array{Float64,3})
-    # similar(x,y) allocates only if y::Void
-    p = similar(mass, p_)
+    p = similar!(p_, mass)
     @with model.mgr,
     let (irange, jrange) = (axes(p, 1), axes(p, 2))
         ptop, nz = model.vcoord.ptop, size(p, 3)
@@ -167,9 +170,9 @@ function hydrostatic_pressure!(p_, model, mass::Array{Float64,3})
 end
 
 function Bernoulli!((B_, exner_, consvar_, Phi_), (mass_air, mass_consvar, p, uv), model)
-    B = similar(p, B_)
-    exner = similar(p, exner_)
-    consvar = similar(p, consvar_)
+    B = similar!(B_, p)
+    exner = similar!(exner_, p)
+    consvar = similar!(consvar_, p)
     Phi = @. Phi_ = model.Phis
 
     @with model.mgr,
