@@ -137,6 +137,7 @@ function mass_budget!(
     @with model.mgr, let (krange, ijrange) = axes(dmass_air)
         @inbounds for ij in ijrange
             deg = vsphere.primal_deg[ij]
+            @assert deg in 5:7 "deg=$deg not in 5:7"
             @unroll deg in 5:7 begin
                 dvg = Stencils.divergence(vsphere, ij, Val(deg))
                 @vec for k in krange
@@ -226,6 +227,7 @@ function Bernoulli!(B_, exner_, model, ucov, consvar, p, Phi)
         fl = debug_flags()
         @inbounds for ij in ijrange
             deg = degree[ij]
+            @assert deg in 5:7 "deg=$deg not in 5:7"
             @unroll deg in 5:7 begin
                 dot_product = Stencils.dot_product(vsphere, ij, Val(deg))
                 @vec for k in krange
@@ -285,6 +287,7 @@ function curl_form!(ducov_, model, PV_e, flux_air, B, consvar, exner)
             avg = Stencils.average_ie(vsphere, ij) # centered average from cells to edges
 
             deg = vsphere.trisk_deg[ij]
+            @assert deg in 9:11 "deg=$deg not in 9:11"
             @unroll deg in 9:11 begin
                 trisk = Stencils.TRiSK(vsphere, ij, Val(deg))
                 @vec for k in krange
