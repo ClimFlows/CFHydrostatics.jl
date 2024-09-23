@@ -1,94 +1,87 @@
 module RemapVoronoi
 
-using ManagedLoops: @loops, @vec
+using MutatingOrNot: void, Void
+using ManagedLoops: @with, @vec
+using CFDomains: Stencils, VoronoiSphere
+using CFTransport: remap_fluxes!
+using ..RemapHPE: vanleer, remap_density!, remap_scalar!, update_mass!
 
-function vertical_remap_LHPE!(backend, (mass, ucov), model, domain, (phi, B, U, qv, qe), (fluxq, flux_e, fluxu))
-    # check vertical sizes
-    @assert size(mass,1) == size(ucov,1)  "Size mismatch"
-    @assert size(phi,1) == size(mass,1)+1 "Size mismatch"
-    @assert size(mass,1) == size(B,1)     "Size mismatch"
-    @assert size(mass,1) == size(U,1)     "Size mismatch"
-    @assert size(mass,1) == size(qv,1)    "Size mismatch"
-    @assert size(mass,1) == size(qe,1)    "Size mismatch"
-    # check horizontal sizes
-    @assert size(mass,2) == size(phi,2)  "Size mismatch"
-    @assert size(mass,2) == size(B,2)    "Size mismatch"
-    @assert size(ucov,2) == size(U,2)    "Size mismatch"
-    @assert size(ucov,2) == size(qe,2)   "Size mismatch"
+# similar!(x,y) allocates only if x::Void
+similar!(::Void, y...) = similar(y...)
+similar!(x, y...) = x
 
-    (; vcoord, domain) = model
-    limiter = Transport.minmod_simd
+remap!(new, scratch, model, state, schemes = (scalar = vanleer, momentum = vanleer)) =
+    remap_staggered!(new, scratch, model, state, schemes)
 
-    barrier(backend) #, @__HERE__)
+function remap_staggered!(new, scratch, model, state, schemes)
+    (; mass_consvar, ucov) = state
+    (; mgr, vcoord, domain) = model
+    vsphere, layout = domain.layer, domain.layout
+    metric_cov = model.planet.radius^2
+    metric_contra = inv(metric_cov)
+
+    scheme_mq = schemes.scalar(:density, layout)
+    scheme_u = schemes.momentum(:scalar, layout)
+
+    # We scale mass_air by the metric_contra because this is what pressure coordinates expect.
+    # This will become unnecessary after introducing mass coordinates.
+    mass_air = @. metric_contra * state.mass_air
 
     # mass fluxes and new mass
-    newmg = @view B[:,:,1]
-    flux = phi
-    mg = @view mass[:,:,1]
-    remap_fluxes_ps!(backend, flux, newmg, mg, vcoord)
+    flux, new_mass_air =
+        remap_fluxes!(mgr, vcoord, layout, scratch.flux, new.mass_air,  #==# mass_air)
 
     # vertical transport of densities
-    vanleer = Transport.VanLeerScheme(:density, limiter, 1, 2)
-    q, dq = ( (@view B[:,:,i]) for i in 2:3 )
-    for iq in 2:size(mass,3)
-        mgq = @view mass[:,:,iq]
-        Transport.concentrations!(backend, q, mgq, mg)
-        Transport.slopes!(backend, vanleer, dq, q)
-        zero_bottom_top!(backend, dq)
-        Transport.fluxes!(backend, vanleer, fluxq, mg, flux, q, dq)
-        zero_bottom_top!(backend, fluxq)
-        Transport.FV_update!(backend, vanleer, mgq, mgq, fluxq)
-    end
-
-    barrier(backend) #, @__HERE__)
-
-    # interpolate mass and vertical mass flux to edges
-    mg_e = qe
-    to_edges!(backend, mg_e, mg, domain.layer.edge_left_right)
-    to_edges(backend, flux_e, flux, domain.layer.edge_left_right)
+    new_mass_consvar, remap_consvar = remap_density!(
+        mgr,
+        scheme_mq,
+        new.mass_consvar,
+        scratch.remap_consvar,
+        mass_consvar,
+        mass_air,
+        flux,
+    )
 
     # vertical transport of momentum
-    ducov = U
-    vanleer = Transport.VanLeerScheme(:scalar, limiter, 1, 2)
-    Transport.slopes!(backend, vanleer, ducov, ucov)
-    zero_bottom_top!(backend, ducov)
-    Transport.fluxes!(backend, vanleer, fluxu, mg_e, flux_e, ucov, ducov)
-    zero_bottom_top!(backend, fluxu)
-    Transport.FV_update!(backend, vanleer, ucov, ucov, fluxu, flux_e, mg_e)
+    flux_e, mass_e =
+        transfer_mass_flux!(mgr, scratch.flux_e, scratch.mass_e, ucov, mass_air, flux, vsphere)
+    new_ucov, remap_momentum = remap_scalar!(
+        mgr,
+        scheme_u,
+        new.ucov,
+        scratch.remap_momentum,
+        ucov,
+        mass_e,
+        flux_e,
+    )
 
-    barrier(backend) #, @__HERE__)
-
-    update_mass!(backend, mg, newmg)
-
-    return nothing
+    scratch = (; flux, flux_e, mass_e, remap_consvar, remap_momentum)
+    # revert scaling, see above
+    new = (mass_air = metric_cov*new_mass_air, mass_consvar = new_mass_consvar, ucov = new_ucov)
+    return new, scratch
 end
 
-@loops function zero_bottom_top!(_, q)
-    let range = axes(q,2)
-        @vec for i in range
-            q[1,i] = 0
-            q[end, i] = 0
-        end
-    end
-end
-
-@loops function to_edges!(_, mg_e, mg, left_right)
-    let (krange, ijrange) = axes(mg_e)
+function transfer_mass_flux!(mgr, flux_e_, mass_e_, ucov, mass_air, flux, vsphere::VoronoiSphere)
+    # interpolate mass and vertical mass flux to edges, where ucov lives
+    mass_e = similar!(mass_e_, ucov)
+    @with mgr, let (krange, ijrange) = axes(mass_e)
         for ij in ijrange
-            left, right = left_right[1,ij], left_right[2,ij]
+            avg = Stencils.average_ie(vsphere, ij)
             @vec for k in krange
-                mg_e[k,ij] = half(mg[k,left] + mg[k,right])
+                mass_e[k, ij] = avg(mass_air, k)
             end
         end
     end
-end
-
-@loops function update_mass!(_, mg, newmg)
-    let range = eachindex(mg)
-        @vec for i in range
-            mg[i] = newmg[i]
+    flux_e = similar!(flux_e_, ucov, size(flux, 1), size(ucov, 2))
+    @with mgr, let (krange, ijrange) = axes(flux_e)
+        for ij in ijrange
+            avg = Stencils.average_ie(vsphere, ij)
+            @vec for k in krange
+                flux_e[k, ij] = avg(flux, k)
+            end
         end
     end
+    return flux_e, mass_e
 end
 
 end # module
