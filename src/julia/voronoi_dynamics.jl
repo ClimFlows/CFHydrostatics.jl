@@ -137,7 +137,7 @@ function mass_budget!(
     @with model.mgr, let (krange, ijrange) = axes(dmass_air)
         @inbounds for ij in ijrange
             deg = vsphere.primal_deg[ij]
-            @assert deg in 5:7 "deg=$deg not in 5:7"
+            # @assert deg in 5:7 "deg=$deg not in 5:7"
             @unroll deg in 5:7 begin
                 dvg = Stencils.divergence(vsphere, ij, Val(deg))
                 @vec for k in krange
@@ -217,7 +217,7 @@ function Bernoulli!(B_, exner_, model, ucov, consvar, p, Phi)
     B = similar!(B_, consvar)
     exner = similar!(exner_, consvar)
 
-    half_metric = (model.planet.radius^-2)/2
+    half_metric = (model.planet.radius^-2) / 2
     Exner = model.gas(:p, :consvar).exner_functions
     vsphere = model.domain.layer
     degree = vsphere.primal_deg
@@ -227,7 +227,7 @@ function Bernoulli!(B_, exner_, model, ucov, consvar, p, Phi)
         fl = debug_flags()
         @inbounds for ij in ijrange
             deg = degree[ij]
-            @assert deg in 5:7 "deg=$deg not in 5:7"
+            # @assert deg in 5:7 "deg=$deg not in 5:7"
             @unroll deg in 5:7 begin
                 dot_product = Stencils.dot_product(vsphere, ij, Val(deg))
                 @vec for k in krange
@@ -235,7 +235,10 @@ function Bernoulli!(B_, exner_, model, ucov, consvar, p, Phi)
                     h, v, exner_ijk = Exner(p[k, ij], consvar_ijk)
                     ke = half_metric * dot_product(ucov, ucov, k)
                     exner[k, ij] = exner_ijk
-                    B[k, ij] = (fl.Phi)*Phi[k, ij] + (fl.ke)*ke + (h - consvar_ijk * exner_ijk)
+                    B[k, ij] =
+                        (fl.Phi) * Phi[k, ij] +
+                        (fl.ke) * ke +
+                        (h - consvar_ijk * exner_ijk)
                 end
             end
         end
@@ -280,19 +283,22 @@ function curl_form!(ducov_, model, PV_e, flux_air, B, consvar, exner)
     ducov = similar!(ducov_, flux_air)
     vsphere = model.domain.layer
 
-    @with model.mgr, let (krange, ijrange) = axes(ducov)
+    @with model.mgr,
+    let (krange, ijrange) = axes(ducov)
         fl = debug_flags()
         @inbounds for ij in ijrange
             grad = Stencils.gradient(vsphere, ij) # covariant gradient
             avg = Stencils.average_ie(vsphere, ij) # centered average from cells to edges
 
             deg = vsphere.trisk_deg[ij]
-            @assert deg in 9:11 "deg=$deg not in 9:11"
+            # @assert deg in 9:11 "deg=$deg not in 9:11"
             @unroll deg in 9:11 begin
                 trisk = Stencils.TRiSK(vsphere, ij, Val(deg))
                 @vec for k in krange
-                    gradB = (fl.gradB)*grad(B, k) + (fl.CgradExner)*avg(consvar, k) * grad(exner, k)
-                    ducov[k, ij] = (fl.qU)*trisk(flux_air, PV_e, k) - gradB
+                    gradB =
+                        (fl.gradB) * grad(B, k) +
+                        (fl.CgradExner) * avg(consvar, k) * grad(exner, k)
+                    ducov[k, ij] = (fl.qU) * trisk(flux_air, PV_e, k) - gradB
                 end
             end
         end
