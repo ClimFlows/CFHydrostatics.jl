@@ -123,21 +123,21 @@ function curl_form!(outputs, locals, inputs, sph, laplace, metric, fcov)
     (; duv_spec) = outputs
     (; qflux_spec, B_spec, fx, fy, zeta, zeta_spec, grad_exner, exner_spec) = locals
 
-    fl = debug_flags()
+    flags = debug_flags()
 
     exner_spec = analysis_scalar!(exner_spec, erase(exner), sph)
     (gradx, grady) = grad_exner = synthesis_spheroidal!(grad_exner, exner_spec, sph)
     zeta_spec = @. zeta_spec = -laplace * uv_spec.toroidal # curl
     zeta = synthesis_scalar!(zeta, zeta_spec, sph)
     (ux, uy) = uv
-    fx = @. fx =  (fl.qU) * metric * (zeta + fcov) * uy - (fl.CgradExner)*consvar * gradx
-    fy = @. fy = -(fl.qU) * metric * (zeta + fcov) * ux - (fl.CgradExner)*consvar * grady
+    fx = @. fx =  (flags.qU) * metric * (zeta + fcov) * uy - (flags.CgradExner)*consvar * gradx
+    fy = @. fy = -(flags.qU) * metric * (zeta + fcov) * ux - (flags.CgradExner)*consvar * grady
 
     qflux_spec = analysis_vector!(qflux_spec, erase(vector_spat(fx, fy)), sph)
 
     B_spec = analysis_scalar!(B_spec, erase(B), sph)
     duv_spec = vector_spec(
-        (@. duv_spec.spheroidal = qflux_spec.spheroidal - (fl.gradB)*B_spec),
+        (@. duv_spec.spheroidal = qflux_spec.spheroidal - (flags.gradB)*B_spec),
         (@. duv_spec.toroidal = qflux_spec.toroidal),
     )
     return (; duv_spec),
@@ -177,7 +177,7 @@ function Bernoulli!((B_, exner_, consvar_, Phi_), (mass_air, mass_consvar, p, uv
 
     @with model.mgr,
     let (irange, jrange) = (axes(p, 1), axes(p, 2))
-        fl = debug_flags()
+        flags = debug_flags()
         ux, uy = uv.ucolat, uv.ulon
         metric = model.planet.radius^-2
         Exner = model.gas(:p, :consvar).exner_functions
@@ -189,7 +189,7 @@ function Bernoulli!((B_, exner_, consvar_, Phi_), (mass_air, mass_consvar, p, uv
                     h, v, exner_ijk = Exner(p[i, j, k], consvar_ijk)
                     Phi_up = Phi[i, j] + metric * mass_air[i, j, k] * v # geopotential at upper interface
                     B[i, j, k] =
-                        (fl.ke)*ke + (fl.Phi)*(Phi_up + Phi[i, j]) / 2 + (h - consvar_ijk * exner_ijk)
+                        (flags.ke)*ke + (flags.Phi)*(Phi_up + Phi[i, j]) / 2 + (h - consvar_ijk * exner_ijk)
                     consvar[i, j, k] = consvar_ijk
                     exner[i, j, k] = exner_ijk
                     Phi[i, j] = Phi_up

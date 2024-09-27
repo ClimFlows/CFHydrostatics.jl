@@ -1,6 +1,7 @@
 module RemapCollocated
 
 using CFTransport: remap_fluxes!
+using CFDomains: mass_coordinate
 using ..RemapHPE: vanleer, remap_density!, remap_scalar!, update_mass!, flatten
 
 # convention:
@@ -12,7 +13,8 @@ function remap!(mgr, vcoord, layout, #==# new, #==# scratch, #==# now, schemes=(
     scheme_mq = schemes.scalar(:density, layout)
     scheme_u = schemes.momentum(:scalar, layout)
     # mass fluxes and new mass
-    flux, new_mass = remap_fluxes!(mgr, vcoord, flatten(layout), scratch.flux, scratch.new_mass, #==# mass)
+    mcoord = mass_coordinate(vcoord, one(eltype(mass)))
+    flux, new_mass = remap_fluxes!(mgr, mcoord, flatten(layout), scratch.flux, scratch.new_mass, #==# mass)
     # vertical transport of densities
     new_massq = remap_density!(mgr, scheme_mq, new.massq, #==# scratch.fluxq, scratch.slope, scratch.q, #==# massq, mass, flux)
     # vertical transport of momentum

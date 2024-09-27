@@ -1,7 +1,7 @@
 name = "CFHydrostatics"
 uuid = "0dc8c93d-0116-402a-b00b-85ddfe5501a2"
 authors = ["The ClimFlows contributors"]
-version = "0.3.4"
+version = "0.3.5"
 
 [deps]
 CFDomains = "3699aaca-035b-4155-96ec-eecb526248de"
@@ -16,11 +16,14 @@ PackageExtensionCompat = "65ce6f38-6b18-4e1d-a461-8949797d7930"
 
 [weakdeps]
 SHTnsSpheres = "9e5c175a-5132-4517-85a1-2957ec255f89"
+Adapt = "79e6a3ab-5dfb-504d-930d-738a2a938a0e"
 
 [extensions]
 SHTnsSpheres_Ext = ["SHTnsSpheres"]
+CFHydrostaticsAdaptExt = ["Adapt"]
 
 [compat]
+Adapt = "2, 3, 4"
 CFDomains = "0.2.4"
 CFTransport = "0.1.5"
 ClimFluids = "0.1.2"
@@ -31,6 +34,7 @@ SHTnsSpheres = "0.2.8"
 julia = "1.8"
 
 [extras]
+Adapt = "79e6a3ab-5dfb-504d-930d-738a2a938a0e"
 SHTnsSpheres = "9e5c175a-5132-4517-85a1-2957ec255f89"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
