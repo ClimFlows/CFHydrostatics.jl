@@ -38,6 +38,9 @@ diagnostics(model::HPE) = HPE_diagnostics(model, model.domain.layer)
 CFTimeSchemes.tendencies!(dstate, scratch, model::HPE, state, t) =
     HPE_tendencies!(dstate, scratch, model, model.domain.layer, state, t)
 
+CFTimeSchemes.tendencies!(slow, fast, scratch, model::HPE, state, t, tau) =
+    HPE_tendencies!(slow, fast, scratch, model, model.domain.layer, state, t, tau)
+
 vertical_remap!(backend, model, new, scratch, now) =
     HPE_remap!(backend, model, model.domain.layer, new, scratch, now)
 

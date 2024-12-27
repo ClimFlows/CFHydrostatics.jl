@@ -41,6 +41,8 @@ include("dynamics.jl")
 
 HPE_tendencies!(dstate, scratch, model, _::SHTnsSphere, state, t) =
     Dynamics.tendencies!(dstate, scratch, model, state, t)
+HPE_tendencies!(slow, fast, scratch, model, _::SHTnsSphere, state, t, tau) =
+    Dynamics.tendencies!(slow, fast, scratch, model, state, t, tau)
 
 include("diagnostics.jl")
 
