@@ -80,7 +80,7 @@ function geopotential(model, masses, pressure)
     Phi = similar(pressure, size(pressure) .+ (0, 0, 1))
     vol = model.gas(:p, :consvar).specific_volume
     p = pressure
-    let (irange, jrange) = (axes(p, 1), axes(p, 2))
+    @with model.mgr let (irange, jrange) = (axes(p, 1), axes(p, 2))
         for j in jrange
             @vec for i in irange
                 Phi[i, j, 1] = model.Phis[i, j]
@@ -122,11 +122,13 @@ function Omega(model, uv, gradmass, dpressure)
             @vec for i in irange
                 px = half_invrad2 * massx[i, j, nz]
                 py = half_invrad2 * massy[i, j, nz]
-                p_dot[i, j, nz] = dp[i, j, nz] + factor * (ux[i, j, nz] * px + uy[i, j, nz] * py)
+                p_dot[i, j, nz] = dp[i, j, nz] +
+                                  factor * (ux[i, j, nz] * px + uy[i, j, nz] * py)
                 for k in (nz - 1):-1:1
                     px += half_invrad2 * (massx[i, j, k + 1] + massx[i, j, k])
                     py += half_invrad2 * (massy[i, j, k + 1] + massy[i, j, k])
-                    p_dot[i, j, k] = dp[i, j, k] + factor * (ux[i, j, k] * px + uy[i, j, k] * py)
+                    p_dot[i, j, k] = dp[i, j, k] +
+                                     factor * (ux[i, j, k] * px + uy[i, j, k] * py)
                 end
             end
         end
