@@ -5,7 +5,8 @@ using SIMDMathFunctions
 using LoopManagers: LoopManager, PlainCPU, VectorizedCPU, MultiThread, no_simd
 using MutatingOrNot: void, similar!
 using ThreadPinning
-using Test
+
+using Pkg, Test, UUIDs
 
 oneAPI_functional = try
     using oneAPI

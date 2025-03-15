@@ -13,11 +13,13 @@ LoopManagers = "d33d4f76-8fbe-47a6-acd9-ead534c583ff"
 ManagedLoops = "36a4119d-6b73-4371-88fe-ba2d91f5495d"
 MutatingOrNot = "6a37069a-9a67-4b2d-a34a-f09ab4b23c7c"
 NetCDF = "30363a11-5582-574a-97bb-aa9a979735b9"
+Pkg = "44cfe95a-1eb2-52ea-b672-e2afdf69b78f"
 PrettyTables = "08abe8d2-0d0c-5749-adfa-8a2ac140af0d"
 SHTnsSpheres = "9e5c175a-5132-4517-85a1-2957ec255f89"
 SIMDMathFunctions = "d22a7203-ad50-4fbc-abc4-d6ac724cca58"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 ThreadPinning = "811555cd-349b-4f26-b7bc-1f208b848042"
+UUIDs = "cf7118a7-6976-5b1a-9a39-7adc72f591a4"
 
 [compat]
 CFTimeSchemes = "0.3"

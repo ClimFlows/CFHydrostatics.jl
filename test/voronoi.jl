@@ -106,34 +106,35 @@ function voronoi()
                                                      (choices..., nz=choices.nz[1]), params,
                                                      simd)
 
-    for nz in choices.nz
-        M = randn(choices.precision, 1024, 1024)
-        N = randn(choices.precision, 1024, 1024)
-        ue = randn(choices.precision, nz, length(edges(vsphere)))
-        qi = randn(choices.precision, nz, length(cells(vsphere)))
-        qv = randn(choices.precision, nz, length(duals(vsphere)))
+    if Pkg.dependencies()[UUID("3699aaca-035b-4155-96ec-eecb526248de")].version >= v"0.3" # CFDomains
+        for nz in choices.nz
+            M = randn(choices.precision, 1024, 1024)
+            N = randn(choices.precision, 1024, 1024)
+            ue = randn(choices.precision, nz, length(edges(vsphere)))
+            qi = randn(choices.precision, nz, length(cells(vsphere)))
+            qv = randn(choices.precision, nz, length(duals(vsphere)))
 
-        data = vcat(bench(vexp!, mgrs, M),
-                    #                    bench(mmul!, mgrs, M, N),
-                    #                    bench(gradient!, mgrs, vsphere, qi),
-                    #                    bench(gradperp!, mgrs, vsphere, qv),
-                    #                    bench(perp!, mgrs, vsphere, ue),
-                    #                    bench(curl!, mgrs, vsphere, ue),
-                    bench(divergence!, mgrs, vsphere, ue),
-                    bench(TRiSK!, mgrs, vsphere, ue))
+            data = vcat(bench(vexp!, mgrs, M),
+                        #                    bench(mmul!, mgrs, M, N),
+                        #                    bench(gradient!, mgrs, vsphere, qi),
+                        #                    bench(gradperp!, mgrs, vsphere, qv),
+                        #                    bench(perp!, mgrs, vsphere, ue),
+                        #                    bench(curl!, mgrs, vsphere, ue),
+                        bench(divergence!, mgrs, vsphere, ue),
+                        bench(TRiSK!, mgrs, vsphere, ue))
 
-        header = (["nz=$nz", mgr_names...])
-        best = Highlighter((data, i, j) -> j > 1 &&
-                               all(data[i, k] >= data[i, j] for k in 2:size(data, 2)),
-                           crayon"red bold")
+            header = (["nz=$nz", mgr_names...])
+            best = Highlighter((data, i, j) -> j > 1 &&
+                                   all(data[i, k] >= data[i, j] for k in 2:size(data, 2)),
+                               crayon"red bold")
 
-        pretty_table(data;
-                     header=header,
-                     formatters=ft_printf("%7.6f", 2:5),
-                     header_crayon=crayon"yellow bold",
-                     highlighters=best,
-                     tf=tf_unicode_rounded)
+            pretty_table(data;
+                         header=header,
+                         formatters=ft_printf("%7.6f", 2:5),
+                         header_crayon=crayon"yellow bold",
+                         highlighters=best,
+                         tf=tf_unicode_rounded)
+        end
     end
-
     return GC.gc(true) # free GPU resources before exiting to avoid segfault ?
 end
