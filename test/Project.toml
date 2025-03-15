@@ -20,7 +20,6 @@ Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 ThreadPinning = "811555cd-349b-4f26-b7bc-1f208b848042"
 
 [compat]
-CFDomains = "0.3"
 CFTimeSchemes = "0.3"
 ClimFlowsTestCases = "0.2"
 ClimFluids = "0.1.3"
