@@ -45,6 +45,9 @@ vertical_remap!(backend, model, new, scratch, now) =
     HPE_remap!(backend, model, model.domain.layer, new, scratch, now)
 
 # implemented in SHTnsSpheres_Ext
+"""
+    model = HPE(params, mgr, layer, vcoord, surface_geopotential, gas)
+"""
 function HPE end
 function HPE_diagnostics end
 function HPE_tendencies! end
