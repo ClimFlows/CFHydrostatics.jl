@@ -21,25 +21,25 @@ function scaling(fun, name, simd, N::Int)
     end
 end
 
-function model(mgr=PlainCPU())
-    ch, p = choices(), map(Float64, params())
+function model(choices, params, mgr=PlainCPU())
+    ch, p = choices, map(Float64, params)
     gas = ch.Fluid(merge(ch, p))
     (; mgr, gas, planet=(; radius=1.0), vcoord=(; ptop=1e3), Phis=0)
 end
 
-function scaling_pressure(choices)
-    (; nlat, nz) = choices()
+function scaling_pressure(choices, params)
+    (; nlat, nz) = choices
     mass = randn(2nlat, nlat, nz)
-    p = hydrostatic_pressure!(void, model(), mass)
+    p = hydrostatic_pressure!(void, model(choices, params), mass)
     for vsize in (16,32)
         scaling("hydrostatic_pressure!", VectorizedCPU(vsize), 100) do mgr
-            hydrostatic_pressure!(p, model(mgr), mass)
+            hydrostatic_pressure!(p, model(choices, params, mgr), mass)
         end
     end
 end
 
 function scaling_Bernouilli(choices)
-    (; nlat, nz) = choices()
+    (; nlat, nz) = choices
     mass = ones(2nlat, nlat, nz, 2)
     mass[:,:,:,2] = 300*mass[:,:,:,1] # theta=300K
     p = 1e5*ones(2nlat, nlat, nz)
@@ -47,7 +47,7 @@ function scaling_Bernouilli(choices)
     B, exner, consvar = Bernoulli(void, void, void, Phis, model(), mass, p)
     for vsize in (16,32)
         scaling("Bernoulli!", VectorizedCPU(vsize), 100) do mgr
-            Bernoulli!(B, exner, consvar, Phi, model(mgr), mass, p)
+            Bernoulli!(B, exner, consvar, Phi, model(choices, params, mgr), mass, p)
         end
     end
 end
