@@ -62,14 +62,19 @@ function harmonics()
     solver! = IVPSolver(scheme, z, state0, z) # mutating
     @twice future, t = CFTimeSchemes.advance!(future, solver!, state0, z, 1)
 
-    @info "Spectral model adjoint"
-    dup(x) = Duplicated(x, make_zero(x))
-    state0_dup = dup(state0)
-    dstate_dup = dup(dstate)
-    scratch_dup = dup(scratch)
+    @info "Spectral model Enzyme adjoint"
+    if Base.VERSION >= v"1.10" && Base.VERSION < v"1.11"
+        dup(x) = Duplicated(x, make_zero(x))
+        state0_dup = dup(state0)
+        dstate_dup = dup(dstate)
+        scratch_dup = dup(scratch)
 
-    tendencies! = Ext.Dynamics.tendencies!
-    @twice tendencies!(dstate, scratch, spmodel, state0, z)
-    @twice autodiff(Reverse, Const(tendencies!), Const, 
+        tendencies! = Ext.Dynamics.tendencies!
+        @twice tendencies!(dstate, scratch, spmodel, state0, z)
+        @twice autodiff(Reverse, Const(tendencies!), Const, 
                             dstate_dup, scratch_dup, Const(spmodel), state0_dup, Const(z))
+    else
+        @warn "Enzyme is known to work only with Julia 1.10 at this time."
+    end
+
 end

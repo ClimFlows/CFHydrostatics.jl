@@ -274,7 +274,7 @@ function hydrostatic_pressure!(p_, model, mass::Array{Float64,3})
     let (irange, jrange) = (axes(p, 1), axes(p, 2))
         ptop, nz = model.vcoord.ptop, size(p, 3)
         half_metric = model.planet.radius^-2 / 2
-        #= @inbounds =# for j in jrange
+        @inbounds for j in jrange
             @vec for i in irange
                 p[i, j, nz] = ptop + half_metric * mass[i, j, nz]
                 for k = nz:-1:2
@@ -299,7 +299,7 @@ function Bernoulli!((B_, exner_, consvar_, Phi_), (mass_air, mass_consvar, p, uv
         ux, uy = uv.ucolat, uv.ulon
         metric = model.planet.radius^-2
         Exner = model.gas(:p, :consvar).exner_functions
-        #= @inbounds =# for j in jrange
+        @inbounds for j in jrange
             for k in axes(p, 3)
                 @vec for i in irange
                     ke = (metric / 2) * (ux[i, j, k]^2 + uy[i, j, k]^2)
@@ -329,7 +329,7 @@ function Bernoulli_fast!((B_, exner_, consvar_, Phi_), (mass_air, mass_consvar, 
         flags = debug_flags()
         metric = model.planet.radius^-2
         Exner = model.gas(:p, :consvar).exner_functions
-        #= @inbounds =# for j in jrange
+        @inbounds for j in jrange
             for k in axes(p, 3)
                 @vec for i in irange
                     consvar_ijk = mass_consvar[i, j, k] / mass_air[i, j, k]
