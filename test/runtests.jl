@@ -1,3 +1,5 @@
+using Pkg, Test, UUIDs
+
 # computing
 using KernelAbstractions, Adapt, ManagedLoops, LoopManagers
 using ManagedLoops: synchronize, @with, @vec, @unroll
@@ -5,8 +7,6 @@ using SIMDMathFunctions
 using LoopManagers: LoopManager, PlainCPU, VectorizedCPU, MultiThread, no_simd
 using MutatingOrNot: void, similar!
 using ThreadPinning
-
-using Pkg, Test, UUIDs
 
 oneAPI_functional = try
     using oneAPI
@@ -22,11 +22,19 @@ catch e
     false
 end
 
+macro twice(expr)
+    return esc(quote
+                   @showtime $expr
+                   @showtime $expr
+               end)
+end
+
 # maths
 using SHTnsSpheres: SHTnsSphere, synthesis_scalar!
 using CFDomains: CFDomains, Stencils, VoronoiSphere, SigmaCoordinate
 using CFTimeSchemes: CFTimeSchemes, RungeKutta4, KinnmarkGray, IVPSolver
 using LinearAlgebra: mul!
+using Enzyme
 
 # physics
 using ClimFlowsTestCases: describe, initial, Jablonowski06
@@ -54,13 +62,13 @@ include("voronoi.jl")
 
 harmonics()
 
-voronoi()
+# voronoi()
 
-exit()
-
-@info "time for 100 scalar spectral transforms"
-@time begin
-    for _ in 1:100
-        synthesis_scalar!(spat, spec, sph)
+if false
+    @info "time for 100 scalar spectral transforms"
+    @time begin
+        for _ in 1:100
+            synthesis_scalar!(spat, spec, sph)
+        end
     end
 end
