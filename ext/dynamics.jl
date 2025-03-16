@@ -41,8 +41,10 @@ function tendencies!(dstate, scratch, model, state, t)
 
     sph, metric, fcov = model.domain.layer, model.planet.radius^-2, model.fcov
 
-    fused_mass_budgets! = Fused(mass_budgets!)
-    fused_curl_form! = Fused(curl_form!)
+#    fused_mass_budgets! = Fused(mass_budgets!)
+#    fused_curl_form! = Fused(curl_form!)
+    fused_mass_budgets! = mass_budgets!
+    fused_curl_form! = curl_form!
 
     # flux-form mass balance
     (; dmass_air_spec, dmass_consvar_spec, uv, mass_air, mass_consvar), locals_dmass =

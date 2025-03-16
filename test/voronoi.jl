@@ -44,15 +44,16 @@ end
 function bench(fun!, mgrs, args...)
     out = fun!(void, mgrs[1], args...)
     times = (mintime(fun!, out, mgr, args) for mgr in mgrs)
+    GC.gc(true) # free GPU resources to avoid segfault ?
     return permutedims([fun!, times...])
 end
 
 function voronoi()
     choices = (gpu_blocks=(0, 32),
                precision=Float32,
-               nz=(32, 96, 96 * 4),
+               nz=(32, 96),
                # numerics
-               meshname=DYNAMICO_meshfile("uni.1deg.mesh.nc"),
+               meshname=DYNAMICO_meshfile("uni.2deg.mesh.nc"),
                coordinate=SigmaCoordinate,
                consvar=:temperature,
                TimeScheme=KinnmarkGray{2,5}, # RungeKutta4,
@@ -115,7 +116,7 @@ function voronoi()
             qv = randn(choices.precision, nz, length(duals(vsphere)))
 
             data = vcat(bench(vexp!, mgrs, M),
-                        #                    bench(mmul!, mgrs, M, N),
+                        bench(mmul!, mgrs, M, N),
                         #                    bench(gradient!, mgrs, vsphere, qi),
                         #                    bench(gradperp!, mgrs, vsphere, qv),
                         #                    bench(perp!, mgrs, vsphere, ue),
@@ -136,5 +137,4 @@ function voronoi()
                          tf=tf_unicode_rounded)
         end
     end
-    return GC.gc(true) # free GPU resources before exiting to avoid segfault ?
 end
