@@ -33,16 +33,13 @@ vector_spat(ucolat, ulon) = (; ucolat, ulon)
 HPE_state(mass_air_spec, mass_consvar_spec, uv_spec) =
     (; mass_air_spec, mass_consvar_spec, uv_spec)
 
-tendencies!(dstate, scratch, model, state, t) = tendencies!_(dstate, scratch, model, model.domain.layer, state)
-
-function tendencies!_(dstate, scratch, model, sph, state)
+function tendencies!(dstate, scratch, model, state, t)
     (; locals, locals_dmass, locals_duv) = scratch
     (; uv, mass_air, mass_consvar, p, B, exner, consvar, geopot) = locals
     (; mass_air_spec, mass_consvar_spec, uv_spec) = state
     dmass_air_spec, dmass_consvar_spec, duv_spec = dstate
 
-#    sph, metric, fcov = model.domain.layer, model.planet.radius^-2, model.fcov
-    metric, fcov = model.planet.radius^-2, model.fcov
+    sph, metric, fcov = model.domain.layer, model.planet.radius^-2, model.fcov
 
 #    fused_mass_budgets! = Fused(mass_budgets!)
 #    fused_curl_form! = Fused(curl_form!)
