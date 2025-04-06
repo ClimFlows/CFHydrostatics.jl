@@ -1,7 +1,6 @@
 [deps]
 Adapt = "79e6a3ab-5dfb-504d-930d-738a2a938a0e"
 CFDomains = "3699aaca-035b-4155-96ec-eecb526248de"
-CFHydrostatics = "0dc8c93d-0116-402a-b00b-85ddfe5501a2"
 CFPlanets = "9c2ca15e-caec-41c0-a22c-2e93fe5a241f"
 CFTimeSchemes = "79282218-dfaf-41aa-91df-a06f65ece871"
 ClimFlowsData = "f57ce217-a21f-4063-8e40-561e9bf56723"

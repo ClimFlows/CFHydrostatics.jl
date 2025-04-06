@@ -68,7 +68,7 @@ function harmonics()
 
     nstep = 50
     @info "Spectral model Enzyme adjoint" nstep
-    if Base.VERSION >= v"1.10" && Base.VERSION < v"1.11"
+    if Base.VERSION >= v"1.10" && Base.VERSION < v"1.12"
         test_autodiff(Ext.Dynamics.tendencies!,
                       Dup(dstate), Dup(scratch), Const(spmodel), Dup(state0), Const(z))
 
@@ -114,7 +114,7 @@ function harmonics()
         =#
 
     else
-        @warn "Enzyme is known to work only with Julia 1.10 at this time."
+        @warn "Enzyme is expected to work only with Julia 1.10-1.11 at this time."
     end
 end
 
