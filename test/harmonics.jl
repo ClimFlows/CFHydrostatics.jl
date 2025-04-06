@@ -82,37 +82,6 @@ function harmonics()
             end
         end
         test_autodiff(repeat_advance!, Dup(scheme), Dup(future), Dup(scratch_scheme))
-
-        #=
-        test_autodiff(CFTimeSchemes.Update.new_update!, Dup(future), Const(nothing), Dup(state0), Const((z,z)), Dup((k0,k1)) )
-        test_autodiff(CFTimeSchemes.Update.new_update!, Dup(future), Const(nothing), Dup(state0), Const((z,z,z,z)), Dup((k0,k1,k2,k3)) )
-
-        test_autodiff(CFTimeSchemes.Update.update!,
-                Dup(future), Const(nothing), Dup(state0), 
-                Const(z), Dup(scratch_scheme.k0),
-                Const(z), Dup(scratch_scheme.k1))
-
-        test_autodiff(CFTimeSchemes.Update.update!,
-                Dup(future), Const(nothing), Dup(state0), 
-                Const(z), Dup(scratch_scheme.k0),
-                Const(z), Dup(scratch_scheme.k1),
-                Const(z), Dup(scratch_scheme.k2),
-                Const(z), Dup(scratch_scheme.k3))
-
-        test_autodiff(Dup(scheme), Dup(future), Dup(scratch_scheme)) do sch, fut, scr
-            repeat(50, fut, scr, nothing) do st, scr, params
-               CFTimeSchemes.advance!(st, sch, st, z, z, scr)
-               nothing
-            end
-            nothing
-        end
-
-        test_autodiff(CFTimeSchemes.advance!,
-            Dup(future), Dup(solver!), Dup(state0), Const(z), Const(2))
-        test_autodiff(CFTimeSchemes.advance!,
-            Dup(future), Dup(solver!), Dup(state0), Const(z), Const(20))
-        =#
-
     else
         @warn "Enzyme is expected to work only with Julia 1.10 at this time."
     end

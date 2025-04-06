@@ -57,7 +57,6 @@ else
     using CFHydrostatics.SHTnsSpheres_Ext.Dynamics: hydrostatic_pressure!, Bernoulli!
 end
 
-# include("repeat.jl")
 include("scaling.jl")
 include("harmonics.jl")
 include("voronoi_ops.jl")
