@@ -25,6 +25,7 @@ SHTnsSpheres_Ext = ["SHTnsSpheres"]
 [compat]
 Adapt = "2, 3, 4"
 CFDomains = "0.2.4, 0.3"
+CFTimeSchemes = "0.3.4"
 CFTransport = "0.1.5"
 ClimFluids = "0.1.2"
 ManagedLoops = "0.1.8"

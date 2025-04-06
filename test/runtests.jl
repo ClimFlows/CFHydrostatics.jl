@@ -8,6 +8,8 @@ using LoopManagers: LoopManager, PlainCPU, VectorizedCPU, MultiThread, no_simd
 using MutatingOrNot: void, similar!
 using ThreadPinning
 
+using OnlineLearningTools: repeat
+
 oneAPI_functional = try
     using oneAPI
     oneAPI.functional()
@@ -55,6 +57,7 @@ else
     using CFHydrostatics.SHTnsSpheres_Ext.Dynamics: hydrostatic_pressure!, Bernoulli!
 end
 
+# include("repeat.jl")
 include("scaling.jl")
 include("harmonics.jl")
 include("voronoi_ops.jl")
