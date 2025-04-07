@@ -8,6 +8,8 @@ using LoopManagers: LoopManager, PlainCPU, VectorizedCPU, MultiThread, no_simd
 using MutatingOrNot: void, similar!
 using ThreadPinning
 
+using OnlineLearningTools: repeat
+
 oneAPI_functional = try
     using oneAPI
     oneAPI.functional()

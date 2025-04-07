@@ -20,9 +20,9 @@ function harmonics()
                consvar=:temperature,
                TestCase=Jablonowski06,
                precision=Float64,
-               TimeScheme=KinnmarkGray{2,5}, # RungeKutta4,
+               TimeScheme=RungeKutta4, # KinnmarkGray{2,5}
                nz=30, # max(30,4*Threads.nthreads()),
-               nlat=256)
+               nlat=96)
 
     params = (ptop=100,
               Cp=1000,
@@ -39,42 +39,59 @@ function harmonics()
 
     threadinfo()
 
-    #    scaling_pressure(choices, params)
+    scaling_pressure(choices, params)
 
     @info "Initializing spherical harmonics..."
     @time sph = SHTnsSphere(choices.nlat)
-    @info sph
 
-    @info "Spectral model setup..."
+    @info "Spectral model setup..." sph choices.nz
     params = map(Float64, params)
     params = (Uplanet=params.radius * params.Omega, params...)
-    @showtime spmodel, state0, diags = setup_spectral(choices, params, sph ; mgr=PlainCPU())
+    @showtime spmodel, state0, diags = setup_spectral(choices, params, sph; mgr=PlainCPU())
 
     @twice dstate, scratch = CFHydrostatics.HPE_tendencies!(void, void, spmodel, sph,
-                                                               state0, z)
+                                                            state0, z)
     @twice dstate, scratch = CFHydrostatics.HPE_tendencies!(dstate, scratch, spmodel,
-                                                               sph, state0, z)
+                                                            sph, state0, z)
 
-    @info "Spectral model time integration"
+    @info "Spectral model time integration" choices.TimeScheme
     scheme = choices.TimeScheme(spmodel)
+    scratch_scheme = CFTimeSchemes.scratch_space(scheme, state0, z)
+
+    (; k0, k1, k2, k3) = scratch_scheme
+    @twice future = CFTimeSchemes.advance!(void, scheme, state0, z, z, scratch_scheme)
+
     solver = IVPSolver(scheme, z)
     @twice future, t = CFTimeSchemes.advance!(void, solver, state0, z, 1)
     solver! = IVPSolver(scheme, z, state0, z) # mutating
     @twice future, t = CFTimeSchemes.advance!(future, solver!, state0, z, 1)
 
-    @info "Spectral model Enzyme adjoint"
+    nstep = 50
+    @info "Spectral model Enzyme adjoint" nstep
     if Base.VERSION >= v"1.10" && Base.VERSION < v"1.11"
-        dup(x) = Duplicated(x, make_zero(x))
-        state0_dup = dup(state0)
-        dstate_dup = dup(dstate)
-        scratch_dup = dup(scratch)
+        test_autodiff(Ext.Dynamics.tendencies!,
+                      Dup(dstate), Dup(scratch), Const(spmodel), Dup(state0), Const(z))
 
-        tendencies! = Ext.Dynamics.tendencies!
-        @twice tendencies!(dstate, scratch, spmodel, state0, z)
-        @twice autodiff(Reverse, Const(tendencies!), Const, 
-                            dstate_dup, scratch_dup, Const(spmodel), state0_dup, Const(z))
+        test_autodiff(CFTimeSchemes.advance!, Dup(future),
+                      Const(scheme), Dup(state0), Const(z), Const(z), Dup(scratch_scheme))
+
+        function repeat_advance!(sch, fut, scr)
+            repeat(nstep, fut, scr, nothing) do st, scr, _
+                CFTimeSchemes.advance!(st, sch, st, z, z, scr)
+                return nothing # required !
+            end
+        end
+        test_autodiff(repeat_advance!, Dup(scheme), Dup(future), Dup(scratch_scheme))
     else
-        @warn "Enzyme is known to work only with Julia 1.10 at this time."
+        @warn "Enzyme is expected to work only with Julia 1.10 at this time."
     end
+end
 
+Dup(x) = Duplicated(x, make_zero(x))
+
+function test_autodiff(fun, args...)
+    @info fun
+    vargs = map(x -> x.val, args)
+    @twice fun(vargs...)
+    @twice autodiff(Reverse, Const(fun), Const, args...)
 end
