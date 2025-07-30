@@ -1,7 +1,7 @@
 name = "CFHydrostatics"
 uuid = "0dc8c93d-0116-402a-b00b-85ddfe5501a2"
 authors = ["The ClimFlows contributors"]
-version = "0.3.11"
+version = "0.4.0"
 
 [deps]
 CFDomains = "3699aaca-035b-4155-96ec-eecb526248de"
@@ -28,7 +28,7 @@ CFDomains = "0.3.5"
 CFTimeSchemes = "0.3.4"
 CFTransport = "0.1.5"
 ClimFluids = "0.1.2"
-ManagedLoops = "0.1.8"
+ManagedLoops = "0.1.13"
 MutatingOrNot = "0.1.3"
 PackageExtensionCompat = "1"
 SHTnsSpheres = "0.2.15"
