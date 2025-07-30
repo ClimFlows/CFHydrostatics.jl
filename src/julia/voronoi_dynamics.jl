@@ -219,8 +219,8 @@ function Bernoulli!(B_, exner_, model, ucov, consvar, p, Phi)
 
     half_metric = (model.planet.radius^-2) / 2
     Exner = model.gas(:p, :consvar).exner_functions
-    vsphere = model.domain.layer
-    degree = vsphere.primal_deg
+    degree = model.domain.layer.primal_deg
+    vsphere = Stencils.dot_product(model.domain.layer) # extract only relevant fields
 
     @with model.mgr,
     let (krange, ijrange) = axes(B)
