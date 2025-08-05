@@ -1,7 +1,7 @@
 name = "CFHydrostatics"
 uuid = "0dc8c93d-0116-402a-b00b-85ddfe5501a2"
 authors = ["The ClimFlows contributors"]
-version = "0.4.0"
+version = "0.4.1"
 
 [deps]
 CFDomains = "3699aaca-035b-4155-96ec-eecb526248de"
