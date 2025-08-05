@@ -1,7 +1,7 @@
 module SHTnsSpheres_Ext
 
 using MutatingOrNot: void, Void
-using SHTnsSpheres: SHTnsSphere, analysis_scalar!, analysis_vector!
+using SHTnsSpheres: SHTnsSphere, analysis_scalar!, analysis_vector!, synthesis_scalar!
 using CFPlanets: ShallowTradPlanet, coriolis
 using CFDomains: shell
 using CFHydrostatics: CFHydrostatics
@@ -14,6 +14,7 @@ function HPE(params, mgr, sph::SHTnsSphere, vcoord, geopotential, gas)
     planet = ShallowTradPlanet(radius, Omega)
     fcov = coriolis.(Ref(planet), lon, lat)
     Phis = geopotential.(lon, lat)
+    Phis = synthesis_scalar!(void, analysis_scalar!(void, Phis, sph), sph) # project onto spherical harmonics
     return HPE(mgr, vcoord, planet, shell(params.nz, sph), gas, fcov, Phis)
 end
 
