@@ -62,9 +62,9 @@ include("harmonics.jl")
 include("voronoi_ops.jl")
 include("voronoi.jl")
 
-harmonics()
-
 voronoi()
+
+harmonics()
 
 if false
     @info "time for 100 scalar spectral transforms"

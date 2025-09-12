@@ -125,7 +125,7 @@ function voronoi()
                         bench(TRiSK!, mgrs, vsphere, ue))
 
             header = (["nz=$nz", mgr_names...])
-            best = TextHighlighter((data, i, j) -> j > 1 &&
+            best = Highlighter((data, i, j) -> j > 1 &&
                                    all(data[i, k] >= data[i, j] for k in 2:size(data, 2)),
                                crayon"red bold")
 
