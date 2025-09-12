@@ -7,6 +7,8 @@ using ManagedLoops: @with, @vec, @unroll
 using MutatingOrNot: void
 using ..Dynamics: tendencies_HV!
 
+shape(x,y) = size(x,1), size(y,2)
+
 diagnostics() = CookBook(;
     ulon,
     ulat,
@@ -29,6 +31,7 @@ diagnostics() = CookBook(;
     kinetic_energy_i,
     gradp_e,
     gradPhi_e,
+    gradPhi_el, Phi_dot_il,
     dmass_air_i,
     dmass_consvar_i,
     lonlat_from_cov,
@@ -265,6 +268,87 @@ function vertical_velocities(
         end
     end
     return (; Omega, Phi_dot)
+end
+
+function gradPhi_el(model, ucov_e, geopotential_i) # 1-form, at edges
+    vsphere = Stencils.gradient(model.domain.layer)
+    gradPhi = similar(ucov_e, shape(geopotential_i, ucov_e))
+    @with model.mgr,
+    let (lrange, edges) = axes(gradPhi)
+        for ij in edges
+            grad = Stencils.gradient(vsphere, ij)
+            for l in lrange
+                gradPhi[l, ij] = grad(geopotential_i, l)
+            end
+        end
+    end
+    return gradPhi
+end
+
+function Phi_dot_il(
+    model,
+    ucov_e,
+    gradPhi_el,
+    dmass_air_i,
+    dmass_consvar_i,
+    pressure_i,
+    mass_air_i,
+    mass_consvar_i,
+)
+    # dmass is a scalar (O-form in kg/m²/s)
+    # consvar is a scalar (O-form in kg/m²/s)
+    ucov_el = similar(ucov_e, shape(gradPhi_el, ucov_e))
+    dp_mid = similar(mass_air_i)
+    Phi_dot = similar(mass_air_i, shape(gradPhi_el, mass_air_i))
+
+    volume = model.gas(:p, :consvar).volume_functions
+    domain = model.domain.layer
+    metric = model.planet.radius^-2 # contravariant metric tensor (diagonal)
+
+    # ucov_el
+    @with model.mgr,
+    let edges = axes(ucov_e, 2)
+        nz = size(mass_air_i, 1)
+        for ij in edges
+            ucov_el[1, ij] = ucov_e[1,ij]
+            for l in 2:nz
+                ucov_el[l,ij] = (ucov_e[l-1,ij]+ucov_e[l,ij])/2
+            end
+            ucov_el[nz+1, ij] = ucov_e[nz,ij]
+        end
+    end
+
+    @with model.mgr,
+    let cells = axes(Phi_dot, 2)
+        nz = size(mass_air_i, 1)
+        for ij in cells
+            # top_down: dp_mid
+            dp_top = zero(dp_mid[1, ij])
+            for k = nz:-1:1
+                dp_bot = dp_top + dmass_air_i[k, ij]
+                dp_mid[k, ij] = (dp_top + dp_bot) / 2
+                dp_top = dp_bot
+            end
+            # bottom-up: Phi_dot
+            deg = domain.primal_deg[ij]
+            @unroll deg in 5:7 begin
+                dot_product = Stencils.dot_product(domain, ij, Val(deg))
+                dPhi = zero(Phi_dot[1, ij])
+                Phi_dot[1, ij] = metric * dot_product(ucov_el, gradPhi_el, 1)
+                for k = 1:nz
+                    consvar = mass_consvar_i[k, ij] / mass_air_i[k, ij]
+                    mass_dconsvar = dmass_consvar_i[k, ij] - consvar * dmass_air_i[k, ij]
+                    v, dv_dp, dv_dconsvar = volume(pressure_i[k, ij], consvar)
+                    dPhi += 
+                        v * dmass_air_i[k, ij] +
+                        dv_dconsvar * mass_dconsvar +
+                        dv_dp * mass_air_i[k, ij] * dp_mid[k, ij]
+                    Phi_dot[k+1, ij] = dPhi + metric * dot_product(ucov_el, gradPhi_el, k+1)
+                end
+            end
+        end
+    end
+    return Phi_dot
 end
 
 #================= tendencies ===================#
