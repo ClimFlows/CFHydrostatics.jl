@@ -2,25 +2,9 @@ module Dynamics
 
 using CFPlanets: lonlat_from_cov
 using ManagedLoops: @with, @vec, @unroll
-using MutatingOrNot: Void, void
-using CFDomains: Stencils
+using MutatingOrNot: Void, void, similar!
+using CFDomains: Stencils, transpose!
 using CFHydrostatics: debug_flags
-
-similar!(x, _...) = x
-similar!(::Void, y...) = similar(y...)
-
-# transpose! can be specialized for specific managers
-# for instance:
-#   import CFHydrostatics.Voronoi.Dynamics: transpose!, Void
-#   function transpose!(x, ::MultiThread, y)
-#       @strided permutedims!(x, y, (2,1))
-#       return x # otherwise returns a StridedView
-#   end
-#   transpose!(::Void, ::MultiThread, y) = permutedims(y, (2,1)) # for non-ambiguity
-
-# ManagedLoops might be a better place to host this function
-transpose!(::Void, mgr, y) = permutedims(y, (2, 1))
-transpose!(x, mgr, y) = permutedims!(x, y, (2, 1))
 
 function tendencies!(dstate, scratch, model, state, t)
     (; mass_air, mass_consvar, ucov) = state
