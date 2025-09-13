@@ -116,7 +116,7 @@ end
 function consvar!(consvar_, mgr, mass_air, mass_consvar)
     consvar = similar!(consvar_, mass_air)
     @with mgr, let (krange, ijrange) = axes(consvar)
-        #=@inbounds=# for ij in ijrange
+        @inbounds for ij in ijrange
             @vec for k in krange
                 consvar[k, ij] = mass_consvar[k, ij] * inv(mass_air[k, ij])
             end
@@ -301,7 +301,7 @@ function fast_ucov!(ducov_, B_, exner_, model, ucov, Phi, p, consvar)
     Exner = model.gas(:p, :consvar).exner_functions
     @with model.mgr,
     let (krange, cells) = axes(B)
-        #=@inbounds=# for cell in cells
+        @inbounds for cell in cells
             @vec for k in krange
                 consvar_cell = consvar[k, cell]
                 h, v, exner_cell = Exner(p[k, cell], consvar_cell)
@@ -315,7 +315,7 @@ function fast_ucov!(ducov_, B_, exner_, model, ucov, Phi, p, consvar)
     vsphere = model.domain.layer
     @with model.mgr,
     let (krange, edges) = axes(ducov)
-        #=@inbounds=# for edge in edges
+        @inbounds for edge in edges
             grad = Stencils.gradient(vsphere, edge) # covariant gradient
             avg = Stencils.average_ie(vsphere, edge) # centered average from cells to edges
             @vec for k in krange
@@ -337,7 +337,7 @@ function slow_curl_form!(ducov_, B_, model, consvar, PV_e, flux_air, ucov)
     B = similar!(B_, consvar) # kinetic energy
     @with model.mgr,
     let (krange, cells) = axes(B)
-        #=@inbounds=# for cell in cells
+        @inbounds for cell in cells
             deg = degree[cell]
             # @assert deg in 5:7 "deg=$deg not in 5:7"
             @unroll deg in 5:7 begin
@@ -352,7 +352,7 @@ function slow_curl_form!(ducov_, B_, model, consvar, PV_e, flux_air, ucov)
     ducov = similar!(ducov_, flux_air)
     @with model.mgr,
     let (krange, edges) = axes(ducov)
-        #=@inbounds=# for edge in edges
+        @inbounds for edge in edges
             grad = Stencils.gradient(vsphere, edge) # covariant gradient
             avg = Stencils.average_ie(vsphere, edge) # centered average from cells to edges
             deg = vsphere.trisk_deg[edge]
