@@ -13,5 +13,11 @@ end
 @inline Base.:+(x::Complex, ::Zero) = x
 @inline Base.:+(x::Number, ::Zero) = x
 @inline Base.:+(::Zero, x::Number) = x
+@inline Base.:+(x::Any, ::Zero) = x
+@inline Base.:+(::Zero, x::Any) = x
 @inline Base.:+(::Zero, x::Complex) = x
 @inline Base.:+(::Zero, ::Zero) = Zero()
+
+@inline Base.muladd(::Number, ::Zero, c::Number) = c
+
+zero_array(x) = ZeroArray(axes(x))

@@ -80,6 +80,7 @@ function tendencies!(dstate, scratch, model, state, t)
 end
 
 function tendencies!(slow, fast, scratch, model, state, t, tau)
+    # Fused = identity # useful to debug but harms performance
     (; locals, locals_duv_fast, locals_slow) = scratch
     (; uv, mass_air, mass_consvar, p, B, exner, consvar, geopot) = locals
     (; mass_air_spec, mass_consvar_spec, uv_spec) = state
