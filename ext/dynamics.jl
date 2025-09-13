@@ -1,6 +1,7 @@
 module Dynamics
 
-using MutatingOrNot: void, Void
+using MutatingOrNot: void, Void, similar!
+using CFDomains.ZeroArrays: zero_array
 
 using ManagedLoops: @with, @vec, no_simd
 using SHTnsSpheres:
@@ -17,12 +18,7 @@ using SHTnsSpheres:
 
 using CFHydrostatics: debug_flags
 
-# similar!(x,y) allocates only if x::Void
-similar!(::Void, y) = similar(y)
-similar!(x, y) = x
-
 include("fused.jl")
-include("zero_array.jl")
 
 # spectral fields are suffixed with _spec
 # vector, spectral = (spheroidal, toroidal)
@@ -41,10 +37,9 @@ function tendencies!(dstate, scratch, model, state, t)
 
     sph, metric, fcov = model.domain.layer, model.planet.radius^-2, model.fcov
 
-#    fused_mass_budgets! = Fused(mass_budgets!)
-#    fused_curl_form! = Fused(curl_form!)
-    fused_mass_budgets! = mass_budgets!
-    fused_curl_form! = curl_form!
+    Fused = identity # FIXME: helps with AD but hurts performance
+    fused_mass_budgets! = Fused(mass_budgets!)
+    fused_curl_form! = Fused(curl_form!)
 
     # flux-form mass balance
     (; dmass_air_spec, dmass_consvar_spec, uv, mass_air, mass_consvar), locals_dmass =
@@ -80,7 +75,6 @@ function tendencies!(dstate, scratch, model, state, t)
 end
 
 function tendencies!(slow, fast, scratch, model, state, t, tau)
-    # Fused = identity # useful to debug but harms performance
     (; locals, locals_duv_fast, locals_slow) = scratch
     (; uv, mass_air, mass_consvar, p, B, exner, consvar, geopot) = locals
     (; mass_air_spec, mass_consvar_spec, uv_spec) = state
@@ -104,6 +98,7 @@ function tendencies!(slow, fast, scratch, model, state, t, tau)
         sph )
     
     # flux-form mass balance and curl-form momentum balance for slow terms
+    # Fused = identity # useful to debug but harms performance
     (; dmass_air_spec_slow, dmass_consvar_spec_slow, duv_spec_slow), locals_slow =
         Fused(tendencies_slow!)(
             (; dmass_air_spec_slow, dmass_consvar_spec_slow, duv_spec_slow),
@@ -117,11 +112,9 @@ function tendencies!(slow, fast, scratch, model, state, t, tau)
     locals = (; uv, mass_air, mass_consvar, p, B, exner, consvar, geopot)
     scratch = (; locals, locals_duv_fast, locals_slow)
 
-    dmass_air_spec_fast = ZeroArray(axes(dmass_air_spec_slow))
-    dmass_consvar_spec_fast = ZeroArray(axes(dmass_consvar_spec_slow))
-
+    zero_mass_spec = zero_array(mass_air_spec)
     slow = HPE_state(dmass_air_spec_slow, dmass_consvar_spec_slow, duv_spec_slow)
-    fast = HPE_state(dmass_air_spec_fast, dmass_consvar_spec_fast, duv_spec_fast)
+    fast = HPE_state(zero_mass_spec, zero_mass_spec, duv_spec_fast)
     return slow, fast, scratch
 end
 

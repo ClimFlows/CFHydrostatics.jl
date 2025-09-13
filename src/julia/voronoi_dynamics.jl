@@ -3,10 +3,9 @@ module Dynamics
 using CFPlanets: lonlat_from_cov
 using ManagedLoops: @with, @vec, @unroll
 using MutatingOrNot: Void, void, similar!
+using CFDomains.ZeroArrays: zero_array
 using CFDomains: Stencils, transpose!
 using CFHydrostatics: debug_flags
-
-include("ext/zero_array.jl") # belongs to CFDomains ?
 
 #=========================== API for fully explicit time scheme =======================#
 
