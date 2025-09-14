@@ -35,5 +35,7 @@ include("voronoi_diagnostics.jl")
 HPE_diagnostics(_, ::VoronoiSphere) = Diagnostics.diagnostics()
 HPE_tendencies!(dstate, scratch, model, ::VoronoiSphere, state, t) =
     Dynamics.tendencies_HV!(dstate, scratch, model, state, t)
+HPE_tendencies!(slow, fast, scratch, model, ::VoronoiSphere, state, t, tau) =
+    Dynamics.tendencies_HV!(slow, fast, scratch, model, state, t, tau)
 
 end # module
