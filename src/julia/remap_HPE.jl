@@ -1,6 +1,6 @@
 module RemapHPE
 
-using MutatingOrNot: Void
+using MutatingOrNot: Void, similar!
 using ManagedLoops: @loops, @vec
 
 using CFDomains: VHLayout, HVLayout
@@ -9,10 +9,6 @@ using CFTransport: CFTransport, OneDimFV, minmod_simd
 const FV{Rank, Dim, kind} = OneDimFV{kind, Dim, Rank} # to dispatch on FV{Rank}
 const AA{Rank, T} = AbstractArray{T, Rank}            # to dispatch on AA{Rank}
 const AAV{Rank, T} = Union{Void, AbstractArray{T, Rank}} # AA or Void (output arguments)
-
-# x = similar!(x,y) replaces output argument `x::Void` by `similar(y)`
-similar!(x, y) = x
-similar!(::Void, y) = similar(y)
 
 # convention:
 #      fun(non-fields, output fields..., #==# input fields...)

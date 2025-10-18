@@ -22,7 +22,7 @@ function remap_staggered!(new, scratch, model, state, schemes)
     scheme_u = schemes.momentum(:scalar, layout)
 
     metric_cov = model.planet.radius^2
-    mcoord = mass_coordinate(model.vcoord, metric_cov) # pressure coordinate => covariant mass coordinate
+    mcoord = mass_coordinate(vcoord, metric_cov) # pressure coordinate => covariant mass coordinate
 
     # Ensuring that new===state works requires that new_mass_air be a scratch array.
     # Scratch space is not needed for new_air_consvar and new_ucov.
