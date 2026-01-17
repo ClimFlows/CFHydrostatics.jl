@@ -136,11 +136,12 @@ function mass_budget!(
     flux_consvar = similar!(flux_consvar_, ucov)
 
     vsphere, metric = model.domain.layer, model.planet.radius^-2
+    vsph = merge(Stencils.centered_flux(vsphere), Stencils.average_ie(vsphere))
 
     @with model.mgr, let (krange, ijrange) = axes(flux_air)
         @inbounds for ij in ijrange
-            flux = Stencils.centered_flux(vsphere, ij)
-            avg = Stencils.average_ie(vsphere, ij)
+            flux = Stencils.centered_flux(vsph, ij)
+            avg = Stencils.average_ie(vsph, ij)
             @vec for k in krange
                 flux_air[k, ij] = metric * flux(mass_air, ucov, k)
                 flux_consvar[k, ij] = flux_air[k, ij] * avg(consvar, k)
@@ -269,18 +270,22 @@ end
 function curl_form!(ducov_, model, PV_e, flux_air, B, consvar, exner)
     ducov = similar!(ducov_, flux_air)
     vsphere = model.domain.layer
+    vsph = merge(Stencils.gradient(vsphere), 
+                Stencils.average_ie(vsphere),
+                Stencils.TRiSK(vsphere))
+    trisk_deg = vsphere.trisk_deg
 
     @with model.mgr,
     let (krange, ijrange) = axes(ducov)
         fl = debug_flags()
         @inbounds for ij in ijrange
-            grad = Stencils.gradient(vsphere, ij) # covariant gradient
-            avg = Stencils.average_ie(vsphere, ij) # centered average from cells to edges
+            grad = Stencils.gradient(vsph, ij) # covariant gradient
+            avg = Stencils.average_ie(vsph, ij) # centered average from cells to edges
 
-            deg = vsphere.trisk_deg[ij]
+            deg = trisk_deg[ij]
             # @assert deg in 9:11 "deg=$deg not in 9:11"
             @unroll deg in 9:11 begin
-                trisk = Stencils.TRiSK(vsphere, ij, Val(deg))
+                trisk = Stencils.TRiSK(vsph, ij, Val(deg))
                 @vec for k in krange
                     gradB =
                         (fl.gradB) * grad(B, k) +
