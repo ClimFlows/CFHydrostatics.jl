@@ -10,14 +10,15 @@ using CFHydrostatics: debug_flags
 #=========================== API for fully explicit time scheme =======================#
 
 function tendencies_HV!(dstate, scratch, model, state, t)
-    (; mass_air, mass_consvar, ucov) = state
-    dmass_air, dmass_consvar, ducov = (dstate.mass_air, dstate.mass_consvar, dstate.ucov)
+    (; masscov_air, masscov_consvar, ucov) = state
+    dmasscov_air, dmasscov_consvar, ducov = (dstate.masscov_air, dstate.masscov_consvar, dstate.ucov)
 
     # flux-form mass budgets
-    (; flux_air, flux_consvar, consvar) = scratch.mass_budget
-    consvar = consvar!(consvar, model.mgr, mass_air, mass_consvar)
-    dmass_air, dmass_consvar, flux_air, flux_consvar = mass_budget!(
-        (dmass_air, dmass_consvar, flux_air, flux_consvar),
+    (; mass_budget) = scratch
+    (; mass_air, flux_air, flux_consvar, consvar) = scratch.mass_budget
+    mass_air, consvar = consvar!(mass_air, consvar, model, masscov_air, masscov_consvar)
+    dmasscov_air, dmasscov_consvar, flux_air, flux_consvar = mass_budget!(
+        (dmasscov_air, dmasscov_consvar, flux_air, flux_consvar),
         model,
         (mass_air, consvar, ucov),
     )
@@ -43,13 +44,13 @@ function tendencies_HV!(dstate, scratch, model, state, t)
     ducov = curl_form!(ducov, model, PV_e, flux_air, B, consvar, exner)
 
     scratch = (
-        mass_budget = (; flux_air, flux_consvar, consvar),
+        mass_budget = (; mass_air, flux_air, flux_consvar, consvar),
         HV = (; consvar_HV, mass_air_HV, pressure_HV, Phi_HV),
         Bernoulli = (; pressure, Phi, B, exner),
         PV = (; PV_e, PV_v),
     )
 
-    return (mass_air = dmass_air, mass_consvar = dmass_consvar, ucov = ducov), scratch
+    return (masscov_air = dmasscov_air, masscov_consvar = dmasscov_consvar, ucov = ducov), scratch
 end
 
 #=========================== API for IMEX time scheme =======================#
@@ -57,7 +58,7 @@ end
 function tendencies_HV!(slow, fast, tmp, model, state, t, tau)
     (; mass_air, mass_consvar, ucov) = state
 
-    consvar = consvar!(tmp.mass_budget.consvar, model.mgr, mass_air, mass_consvar)
+    mass_air, consvar = consvar!(tmp.mass_budget.mass_air, tmp.mass_budget.consvar, model, masscov_air, mass_consvar)
 
     # fast tendencies: 0, 0, -( ∇(Φ+h-θπ)+θ∇π )
 
@@ -98,7 +99,7 @@ function tendencies_HV!(slow, fast, tmp, model, state, t, tau)
     tmp = (
         HV = (; consvar_HV, mass_air_HV, pressure_HV, Phi_HV),
         fast = (; pressure, Phi, new_ucov, fast_B, exner),
-        mass_budget = (; flux_air, flux_consvar, consvar),
+        mass_budget = (; mass_air, flux_air, flux_consvar, consvar),
         slow = (; PV_e, PV_v, KE),
     )
 
@@ -113,25 +114,28 @@ end
 #   d(mass_air)/dt = -div(U_air)
 #   d(mass_consvar)/dt = -div(U_consvar)
 
-function consvar!(consvar_, mgr, mass_air, mass_consvar)
-    consvar = similar!(consvar_, mass_air)
+function consvar!(mass_air_, consvar_, model, masscov_air, masscov_consvar)
+    mgr, inv_Ai = model.mgr, model.domain.layer.inv_Ai
+    mass_air = similar!(mass_air_, masscov_air)
+    consvar = similar!(consvar_, masscov_consvar)
     @with mgr, let (krange, ijrange) = axes(consvar)
         @inbounds for ij in ijrange
             @vec for k in krange
-                consvar[k, ij] = mass_consvar[k, ij] * inv(mass_air[k, ij])
+                mass_air[k, ij] = masscov_air[k, ij] * inv_Ai[ij]
+                consvar[k, ij] = masscov_consvar[k, ij] * inv(masscov_air[k, ij])
             end
         end
     end
-    return consvar
+    return mass_air, consvar
 end
 
 function mass_budget!(
-    (dmass_air_, dmass_consvar_, flux_air_, flux_consvar_),
+    (dmasscov_air_, dmasscov_consvar_, flux_air_, flux_consvar_),
     model,
     (mass_air, consvar, ucov),
 )
-    dmass_air = similar!(dmass_air_, mass_air)
-    dmass_consvar = similar!(dmass_consvar_, consvar)
+    dmasscov_air = similar!(dmasscov_air_, mass_air)
+    dmasscov_consvar = similar!(dmasscov_consvar_, consvar)
     flux_air = similar!(flux_air_, ucov)
     flux_consvar = similar!(flux_consvar_, ucov)
 
@@ -149,21 +153,21 @@ function mass_budget!(
         end
     end
 
-    @with model.mgr, let (krange, ijrange) = axes(dmass_air)
+    @with model.mgr, let (krange, ijrange) = axes(dmasscov_air)
         @inbounds for ij in ijrange
             deg = vsphere.primal_deg[ij]
             # @assert deg in 5:7 "deg=$deg not in 5:7"
             @unroll deg in 5:7 begin
-                dvg = Stencils.divergence(vsphere, ij, Val(deg))
+                dvg = Stencils.div_form(vsphere, ij, Val(deg)) # does not divide by Ai
                 @vec for k in krange
-                    dmass_air[k, ij] = -dvg(flux_air, k)
-                    dmass_consvar[k, ij] = -dvg(flux_consvar, k)
+                    dmasscov_air[k, ij] = -dvg(flux_air, k)
+                    dmasscov_consvar[k, ij] = -dvg(flux_consvar, k)
                 end
             end
         end
     end
 
-    return dmass_air, dmass_consvar, flux_air, flux_consvar
+    return dmasscov_air, dmasscov_consvar, flux_air, flux_consvar
 end
 
 function hydrostatic_balance_HV!(Phi_, p_, model, mass_air, consvar)
