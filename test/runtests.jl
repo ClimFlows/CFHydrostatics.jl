@@ -1,13 +1,16 @@
 using Pkg, Test, UUIDs
 
+using Preferences
+import HostCPUFeatures
+@assert load_preference("HostCPUFeatures", "allow_runtime_invalidation")
+@assert HostCPUFeatures.allow_eval
+
 # computing
+using SIMDMathFunctions, ThreadPinning
 using KernelAbstractions, Adapt, ManagedLoops, LoopManagers
 using ManagedLoops: synchronize, @with, @vec, @unroll
-using SIMDMathFunctions
 using LoopManagers: LoopManager, PlainCPU, VectorizedCPU, MultiThread, no_simd
 using MutatingOrNot: void, similar!
-using ThreadPinning
-
 using OnlineLearningTools: repeat
 
 oneAPI_functional = try

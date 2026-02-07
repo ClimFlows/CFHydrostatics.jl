@@ -1,0 +1,3 @@
+[HostCPUFeatures]
+# This seems necessary on Gitlab CI + Julia 1.10
+allow_runtime_invalidation = true
