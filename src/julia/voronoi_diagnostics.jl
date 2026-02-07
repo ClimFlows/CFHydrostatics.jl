@@ -57,9 +57,18 @@ Phi_dot(to_lonlat, vertical_velocities) = to_lonlat(vertical_velocities.Phi_dot)
 # diagnostics on native grid
 
 ucov_e(state) = state.ucov
-mass_air_i(model, state) = rescale_mass(model, state.mass_air)
-mass_consvar_i(model, state) = rescale_mass(model, state.mass_consvar)
-rescale_mass(model, mass) = (model.planet.radius^-2) * mass
+mass_air_i(model, state) = rescale_mass(model, state.masscov_air)
+mass_consvar_i(model, state) = rescale_mass(model, state.masscov_consvar)
+
+function rescale_mass(model, mass)
+    (; inv_Ai) = model.domain.layer
+    metric = model.planet.radius^-2
+    masscov =  similar(mass)
+    for k in axes(masscov,1), ij in axes(masscov, 2)
+        masscov[k, ij] = metric*inv_Ai[ij] * mass[k, ij] 
+    end
+    return masscov
+end
 
 ulonlat_i(ucov_e, lonlat_from_cov) = lonlat_from_cov(ucov_e)
 

@@ -10,59 +10,58 @@ using ..RemapHPE: vanleer, remap_density!, remap_scalar!, update_mass!
 similar!(::Void, y...) = similar(y...)
 similar!(x, y...) = x
 
-remap!(new, scratch, model, state, schemes = (scalar = vanleer, momentum = vanleer)) =
-    remap_staggered!(new, scratch, model, state, schemes)
+remap!(new, tmp, model, state, schemes = (scalar = vanleer, momentum = vanleer)) =
+    remap_staggered!(new, tmp, model, state, schemes)
 
-function remap_staggered!(new, scratch, model, state, schemes)
-    (; mass_consvar, ucov) = state
+function remap_staggered!(new, tmp, model, state, schemes)
+    (; masscov_air, masscov_consvar, ucov) = state
     (; mgr, vcoord, domain) = model
     vsphere, layout = domain.layer, domain.layout
 
     scheme_mq = schemes.scalar(:density, layout)
     scheme_u = schemes.momentum(:scalar, layout)
 
-    metric_cov = model.planet.radius^2
-    mcoord = mass_coordinate(vcoord, metric_cov) # pressure coordinate => covariant mass coordinate
+    cell_area = @. tmp.cell_area = (model.planet.radius^2)*model.domain.layer.Ai # cell area in m²
+    mcoord = mass_coordinate(vcoord, cell_area) # pressure coordinate => covariant mass coordinate
 
-    # Ensuring that new===state works requires that new_mass_air be a scratch array.
-    # Scratch space is not needed for new_air_consvar and new_ucov.
+    # Ensuring that new===state works requires that new_masscov_air be a scratch array.
+    # Scratch space is not needed for new_masscov_consvar and new_ucov.
 
     # mass fluxes and new mass
-    mass_air = state.mass_air  # `mcoord` works with `mass_air` per unit surface on the unit sphere
-    flux, new_mass_air =
-        remap_fluxes!(mgr, mcoord, layout, scratch.flux, scratch.new_mass_air, mass_air)
+    flux, new_masscov_air =
+        remap_fluxes!(mgr, mcoord, layout, tmp.flux, tmp.new_masscov_air, masscov_air)
 
     # vertical transport of densities
-    new_mass_consvar, remap_consvar = remap_density!(
+    new_masscov_consvar, remap_consvar = remap_density!(
         mgr,
         scheme_mq,
-        new.mass_consvar,
-        scratch.remap_consvar,
-        mass_consvar,
-        mass_air,
+        new.masscov_consvar,
+        tmp.remap_consvar,
+        masscov_consvar,
+        masscov_air,
         flux,
     )
 
     # vertical transport of momentum
     flux_e, mass_e = transfer_mass_flux!(
         mgr,
-        scratch.flux_e,
-        scratch.mass_e,
+        tmp.flux_e,
+        tmp.mass_e,
         ucov,
-        mass_air,
+        masscov_air,
         flux,
         vsphere,
     )
     new_ucov, remap_momentum =
-        remap_scalar!(mgr, scheme_u, new.ucov, scratch.remap_momentum, ucov, mass_e, flux_e)
+        remap_scalar!(mgr, scheme_u, new.ucov, tmp.remap_momentum, ucov, mass_e, flux_e)
 
-    scratch = (; new_mass_air, flux, flux_e, mass_e, remap_consvar, remap_momentum)
+    tmp = (; cell_area, new_masscov_air, flux, flux_e, mass_e, remap_consvar, remap_momentum)
     new = (
-        mass_air = (@. new.mass_air = new_mass_air),
-        mass_consvar = new_mass_consvar,
+        masscov_air = (@. new.masscov_air = new_masscov_air),
+        masscov_consvar = new_masscov_consvar,
         ucov = new_ucov,
     )
-    return new, scratch
+    return new, tmp
 end
 
 function transfer_mass_flux!(

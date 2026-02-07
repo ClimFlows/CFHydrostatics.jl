@@ -16,17 +16,25 @@ end
 
 # called by initial_HPE
 function initial_HPE_VH(model, nz, sph::VoronoiSphere, case)
-    (; lon_i, lat_i, lon_e, lat_e, angle_e, de) = sph
-    mass_air, mass_consvar, _, _ = initial_HPE_VH_collocated(model, nz, lon_i, lat_i, model.gas, case)
+    (; Ai, lon_i, lat_i, lon_e, lat_e, angle_e, de) = sph
+    masscov_air, masscov_consvar, _, _ = initial_HPE_VH_collocated(model, nz, lon_i, lat_i, model.gas, case)
     _, _, ulon, ulat = initial_HPE_VH_collocated(model, nz, lon_e, lat_e, model.gas, case)
 
+    # prognostic variables are covariant
+    # air mass and θ mass : value per unit area * cell area
+    for k in 1:nz, ij in eachindex(Ai)
+        masscov_air[k, ij] *= Ai[ij]
+        masscov_consvar[k, ij] *= Ai[ij]
+    end
+
+    # momentum: component normal to Voronoi edge * triangular edge length
     ucov = similar(ulon)
     for k in 1:nz, ij in eachindex(de)
         sin_e, cos_e = sincos(angle_e[ij])
         ucov[k, ij] = de[ij]*(cos_e*ulon[k,ij] + sin_e*ulat[ij])
     end
 
-    return (; mass_air, mass_consvar, ucov)
+    return (; masscov_air, masscov_consvar, ucov)
 end
 
 include("voronoi_dynamics.jl")
