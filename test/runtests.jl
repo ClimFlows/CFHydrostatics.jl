@@ -49,7 +49,7 @@ using CFPlanets: ShallowTradPlanet
 
 # data
 using NetCDF: ncread, ncwrite, nccreate, ncclose
-using ClimFlowsData: DYNAMICO_reader, DYNAMICO_meshfile
+using ClimFlowsData: DYNAMICO_reader, VoronoiMeshes
 using PrettyTables
 
 if CFHydrostatics.PackageExtensionCompat.HAS_NATIVE_EXTENSIONS

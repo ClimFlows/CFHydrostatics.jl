@@ -53,7 +53,7 @@ function voronoi()
                precision=Float32,
                nz=(32, 96),
                # numerics
-               meshname=DYNAMICO_meshfile("uni.2deg.mesh.nc"),
+               meshname=VoronoiMeshes("uni.2deg.mesh.nc"),
                coordinate=SigmaCoordinate,
                consvar=:temperature,
                TimeScheme=KinnmarkGray{2,5}, # RungeKutta4,
