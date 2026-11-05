@@ -1,9 +1,9 @@
 module Diagnostics
 
 using CookBooks: CookBook
-using CFDomains: Stencils, primal_lonlat_from_cov!
+using VoronoiSpheres: Stencils
 using CFPlanets
-using ManagedLoops: @with, @vec, @unroll
+using ManagedLoops: @with, @vec
 using MutatingOrNot: void
 using ..Dynamics: tendencies_HV!
 
@@ -99,13 +99,71 @@ function pressure_i(model, mass_air_i)
     return p
 end
 
+# CFDomains 0.5 removed this diagnostic helper (it used the old matrix-based
+# stencil layout); keep a local copy using the tuple-based stencils.
+@inline primal3D_from_cov!(ij, ucov, edges, weights) = begin
+    edges_ij = edges[ij]
+    (
+        sum(weights[iedge, ij, 1] * ucov[edges_ij[iedge]] for iedge in eachindex(edges_ij)),
+        sum(weights[iedge, ij, 2] * ucov[edges_ij[iedge]] for iedge in eachindex(edges_ij)),
+        sum(weights[iedge, ij, 3] * ucov[edges_ij[iedge]] for iedge in eachindex(edges_ij)),
+    )
+end
+
+@inline function primal_lonlat_from_cov!(
+    fun::Fun,
+    ulon::T,
+    ulat::T,
+    ucov::T,
+    edges,
+    weights,
+    coslon,
+    sinlon,
+    coslat,
+    sinlat,
+) where {Fun,T<:AbstractVector}
+    for ij in eachindex(ulon, ulat, edges, coslon, sinlon, coslat, sinlat)
+        u, v, w = primal3D_from_cov!(ij, ucov, edges, weights)
+        ulon[ij], ulat[ij] = fun(
+            ij,
+            v * coslon[ij] - u * sinlon[ij],
+            w * coslat[ij] - sinlat[ij] * (u * coslon[ij] + v * sinlon[ij]),
+        )
+    end
+    return ulon, ulat
+end
+
+@inline function primal_lonlat_from_cov!(
+    fun::Fun,
+    ulon::T,
+    ulat::T,
+    ucov::T,
+    edges,
+    weights,
+    coslon,
+    sinlon,
+    coslat,
+    sinlat,
+) where {Fun,T<:AbstractMatrix}
+    for ij in eachindex(edges, coslon, sinlon, coslat, sinlat)
+        for k in axes(ulon, 1)
+            u, v, w = primal3D_from_cov!(ij, view(ucov, k, :), edges, weights)
+            ulon[k, ij], ulat[k, ij] = fun(
+                ij,
+                v * coslon[ij] - u * sinlon[ij],
+                w * coslat[ij] - sinlat[ij] * (u * coslon[ij] + v * sinlon[ij]),
+            )
+        end
+    end
+    return ulon, ulat
+end
+
 function lonlat_from_cov(model, state)
     domain, planet = model.domain.layer, model.planet
     lon, lat = domain.lon_i, domain.lat_i
     coslon, sinlon = cos.(lon), sin.(lon)
     coslat, sinlat = cos.(lat), sin.(lat)
     args = (
-        domain.primal_deg,
         domain.primal_edge,
         domain.primal_perot_cov,
         coslon,
@@ -147,12 +205,10 @@ function kinetic_energy_i(model, ucov_e, mass_air_i)
     @with model.mgr,
     let (krange, ijrange) = axes(ke)
         for ij in ijrange
-            deg = domain.primal_deg[ij]
-            @unroll deg in 5:7 begin
-                dot_product = Stencils.dot_product(domain, ij, Val(deg))
-                @vec for k in krange
-                    ke[k, ij] = half_metric * dot_product(ucov_e, ucov_e, k)
-                end
+            dot_product = Stencils.dot_product_form(domain, ij)
+            inv_Ai = domain.inv_Ai[ij]
+            @vec for k in krange
+                ke[k, ij] = half_metric * inv_Ai * dot_product(ucov_e, ucov_e, k)
             end
         end
     end
@@ -209,12 +265,10 @@ function dmass_i(model, mass_i, ucov_e) # scalar, primal mesh
 
     @with model.mgr, let (krange, ijrange) = axes(dmass)
         @inbounds for ij in ijrange
-            deg = domain.primal_deg[ij]
-            @unroll deg in 5:7 begin
-                dvg = Stencils.divergence(domain, ij, Val(deg))
-                for k in krange
-                    dmass[k, ij] = -dvg(flux, k)
-                end
+            dvg = Stencils.div_form(domain, ij)
+            inv_Ai = domain.inv_Ai[ij]
+            for k in krange
+                dmass[k, ij] = -inv_Ai * dvg(flux, k)
             end
         end
     end
@@ -246,33 +300,31 @@ function vertical_velocities(
     let ijrange = axes(Omega, 2)
         nz = size(Omega, 1)
         for ij in ijrange
-            deg = domain.primal_deg[ij]
-            @unroll deg in 5:7 begin
-                dot_product = Stencils.dot_product(domain, ij, Val(deg))
-                # top_down: dp, Omega
-                dp_top = zero(Omega[1, ij])
-                for k = nz:-1:1
-                    dp_bot = dp_top + dmass_air_i[k, ij]
-                    dp_mid[k, ij] = (dp_top + dp_bot) / 2
-                    ugradp_ijk = metric * dot_product(ucov_e, gradp_e, k)
-                    Omega[k, ij] = dp_mid[k, ij] + ugradp_ijk
-                    dp_top = dp_bot
-                end
-                # bottom-up: Phi_dot
-                dPhi = zero(Phi_dot[1, ij])
-                for k = 1:nz
-                    consvar = mass_consvar_i[k, ij] / mass_air_i[k, ij]
-                    mass_dconsvar = dmass_consvar_i[k, ij] - consvar * dmass_air_i[k, ij]
-                    v, dv_dp, dv_dconsvar = volume(pressure_i[k, ij], consvar)
-                    ddPhi =
-                        v * dmass_air_i[k, ij] +
-                        dv_dconsvar * mass_dconsvar +
-                        dv_dp * mass_air_i[k, ij] * dp_mid[k, ij]
-                    # here we take care to write into Phi_dot *after* reading from dp_mid
-                    ugradPhi_ijk = metric * dot_product(ucov_e, gradPhi_e, k)
-                    Phi_dot[k, ij] = (dPhi + ddPhi / 2) + ugradPhi_ijk
-                    dPhi += ddPhi
-                end
+            dot_product = Stencils.dot_product_form(domain, ij)
+            inv_Ai = domain.inv_Ai[ij]
+            # top_down: dp, Omega
+            dp_top = zero(Omega[1, ij])
+            for k = nz:-1:1
+                dp_bot = dp_top + dmass_air_i[k, ij]
+                dp_mid[k, ij] = (dp_top + dp_bot) / 2
+                ugradp_ijk = metric * inv_Ai * dot_product(ucov_e, gradp_e, k)
+                Omega[k, ij] = dp_mid[k, ij] + ugradp_ijk
+                dp_top = dp_bot
+            end
+            # bottom-up: Phi_dot
+            dPhi = zero(Phi_dot[1, ij])
+            for k = 1:nz
+                consvar = mass_consvar_i[k, ij] / mass_air_i[k, ij]
+                mass_dconsvar = dmass_consvar_i[k, ij] - consvar * dmass_air_i[k, ij]
+                v, dv_dp, dv_dconsvar = volume(pressure_i[k, ij], consvar)
+                ddPhi =
+                    v * dmass_air_i[k, ij] +
+                    dv_dconsvar * mass_dconsvar +
+                    dv_dp * mass_air_i[k, ij] * dp_mid[k, ij]
+                # here we take care to write into Phi_dot *after* reading from dp_mid
+                ugradPhi_ijk = metric * inv_Ai * dot_product(ucov_e, gradPhi_e, k)
+                Phi_dot[k, ij] = (dPhi + ddPhi / 2) + ugradPhi_ijk
+                dPhi += ddPhi
             end
         end
     end
@@ -339,21 +391,19 @@ function Phi_dot_il(
                 dp_top = dp_bot
             end
             # bottom-up: Phi_dot
-            deg = domain.primal_deg[ij]
-            @unroll deg in 5:7 begin
-                dot_product = Stencils.dot_product(domain, ij, Val(deg))
-                dPhi = zero(Phi_dot[1, ij])
-                Phi_dot[1, ij] = metric * dot_product(ucov_el, gradPhi_el, 1)
-                for k = 1:nz
-                    consvar = mass_consvar_i[k, ij] / mass_air_i[k, ij]
-                    mass_dconsvar = dmass_consvar_i[k, ij] - consvar * dmass_air_i[k, ij]
-                    v, dv_dp, dv_dconsvar = volume(pressure_i[k, ij], consvar)
-                    dPhi += 
-                        v * dmass_air_i[k, ij] +
-                        dv_dconsvar * mass_dconsvar +
-                        dv_dp * mass_air_i[k, ij] * dp_mid[k, ij]
-                    Phi_dot[k+1, ij] = dPhi + metric * dot_product(ucov_el, gradPhi_el, k+1)
-                end
+            dot_product = Stencils.dot_product_form(domain, ij)
+            inv_Ai = domain.inv_Ai[ij]
+            dPhi = zero(Phi_dot[1, ij])
+            Phi_dot[1, ij] = metric * inv_Ai * dot_product(ucov_el, gradPhi_el, 1)
+            for k = 1:nz
+                consvar = mass_consvar_i[k, ij] / mass_air_i[k, ij]
+                mass_dconsvar = dmass_consvar_i[k, ij] - consvar * dmass_air_i[k, ij]
+                v, dv_dp, dv_dconsvar = volume(pressure_i[k, ij], consvar)
+                dPhi += 
+                    v * dmass_air_i[k, ij] +
+                    dv_dconsvar * mass_dconsvar +
+                    dv_dp * mass_air_i[k, ij] * dp_mid[k, ij]
+                Phi_dot[k+1, ij] = dPhi + metric * inv_Ai * dot_product(ucov_el, gradPhi_el, k+1)
             end
         end
     end

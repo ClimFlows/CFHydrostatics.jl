@@ -2,7 +2,8 @@ module RemapVoronoi
 
 using MutatingOrNot: void, Void
 using ManagedLoops: @with, @vec
-using CFDomains: Stencils, VoronoiSphere, mass_coordinate
+using CFDomains: mass_coordinate
+using VoronoiSpheres: Stencils, VoronoiSphere
 using CFTransport: remap_fluxes!
 using ..RemapHPE: vanleer, remap_density!, remap_scalar!, update_mass!
 

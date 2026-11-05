@@ -36,7 +36,8 @@ end
 
 # maths
 using SHTnsSpheres: SHTnsSphere, synthesis_scalar!
-using CFDomains: CFDomains, Stencils, VoronoiSphere, SigmaCoordinate
+using CFDomains: CFDomains, SigmaCoordinate
+using VoronoiSpheres: Stencils, VoronoiSphere
 using CFTimeSchemes: CFTimeSchemes, RungeKutta4, KinnmarkGray, IVPSolver
 using LinearAlgebra: mul!
 using Enzyme
@@ -49,7 +50,7 @@ using CFPlanets: ShallowTradPlanet
 
 # data
 using NetCDF: ncread, ncwrite, nccreate, ncclose
-using ClimFlowsData: DYNAMICO_reader, DYNAMICO_meshfile
+using ClimFlowsData: DYNAMICO_reader, VoronoiMeshes
 using PrettyTables
 
 if CFHydrostatics.PackageExtensionCompat.HAS_NATIVE_EXTENSIONS
