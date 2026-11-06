@@ -221,7 +221,7 @@ function gradp_e(model, ucov_e, pressure_i) # 1-form, at edges
 
     @with model.mgr, let (krange, ijrange) = axes(gradp)
         for ij in ijrange
-            left, right = left_right[1, ij], left_right[2, ij]
+            left, right = left_right[ij]
             @vec for k in krange
                 gradp[k, ij] = pressure_i[k, right] - pressure_i[k, left]
             end
@@ -237,7 +237,7 @@ function gradPhi_e(model, ucov_e, geopotential_i) # 1-form, at edges
     @with model.mgr,
     let (krange, ijrange) = axes(gradPhi)
         for ij in ijrange
-            left, right = left_right[1, ij], left_right[2, ij]
+            left, right = left_right[ij]
             @vec for k in krange
                 gradPhi[k, ij] =
                     (
