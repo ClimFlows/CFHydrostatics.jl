@@ -26,6 +26,7 @@ UUIDs = "cf7118a7-6976-5b1a-9a39-7adc72f591a4"
 VoronoiSpheres = "75509e46-8d8c-4f7e-9072-0d95c5edd9e4"
 
 [compat]
+ClimFlowsData = "0.3"
 CFTimeSchemes = "0.3"
 ClimFlowsTestCases = "0.2"
 Enzyme = "=0.13.86"
