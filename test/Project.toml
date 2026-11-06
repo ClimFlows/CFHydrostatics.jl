@@ -23,6 +23,7 @@ SIMDMathFunctions = "d22a7203-ad50-4fbc-abc4-d6ac724cca58"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 ThreadPinning = "811555cd-349b-4f26-b7bc-1f208b848042"
 UUIDs = "cf7118a7-6976-5b1a-9a39-7adc72f591a4"
+VoronoiSpheres = "75509e46-8d8c-4f7e-9072-0d95c5edd9e4"
 
 [compat]
 ClimFlowsData = "0.3"

@@ -107,6 +107,19 @@ function voronoi()
                                                      (choices..., nz=choices.nz[1]), params,
                                                      simd)
 
+    # regression test for VoronoiSpheres >= 0.1.5: edge_left_right is a vector
+    # of 2-tuples, not a 2-row matrix.
+    let nz = size(state.ucov, 1), ncells = length(cells(vsphere))
+        pressure_i = randn(choices.precision, nz, ncells)
+        geopotential_i = randn(choices.precision, nz + 1, ncells)
+        gradp = CFHydrostatics.Voronoi.Diagnostics.gradp_e(model, state.ucov, pressure_i)
+        gradPhi = CFHydrostatics.Voronoi.Diagnostics.gradPhi_e(model, state.ucov, geopotential_i)
+        @test size(gradp) == size(state.ucov)
+        @test size(gradPhi) == size(state.ucov)
+        @test all(isfinite, gradp)
+        @test all(isfinite, gradPhi)
+    end
+
     if Pkg.dependencies()[UUID("3699aaca-035b-4155-96ec-eecb526248de")].version >= v"0.3" # CFDomains
         for nz in choices.nz
             M = randn(choices.precision, 1024, 1024)

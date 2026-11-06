@@ -36,7 +36,8 @@ end
 
 # maths
 using SHTnsSpheres: SHTnsSphere, synthesis_scalar!
-using CFDomains: CFDomains, Stencils, VoronoiSphere, SigmaCoordinate
+using CFDomains: CFDomains, SigmaCoordinate
+using VoronoiSpheres: Stencils, VoronoiSphere
 using CFTimeSchemes: CFTimeSchemes, RungeKutta4, KinnmarkGray, IVPSolver
 using LinearAlgebra: mul!
 using Enzyme

@@ -1,10 +1,11 @@
 module Dynamics
 
 using CFPlanets: lonlat_from_cov
-using ManagedLoops: @with, @vec, @unroll
+using ManagedLoops: @with, @vec
 using MutatingOrNot: Void, void, similar!
 using CFDomains.ZeroArrays: zero_array
-using CFDomains: Stencils, transpose!
+using CFDomains: transpose!
+using VoronoiSpheres: Stencils
 using CFHydrostatics: debug_flags
 
 # specialize this routine to provide loop-specific manager configuration
@@ -160,17 +161,12 @@ function mass_budget!(
     end
 
     vsph2 = Stencils.div_form(vsphere)
-    primal_deg = vsphere.primal_deg
     @with model.mgr, let (krange, ijrange) = axes(dmasscov_air)
         @inbounds for ij in ijrange
-            deg = primal_deg[ij]
-            # @assert deg in 5:7 "deg=$deg not in 5:7"
-            @unroll deg in 5:7 begin
-                dvg = Stencils.div_form(vsph2, ij, Val(deg)) # does not divide by Ai
-                @vec for k in krange
-                    dmasscov_air[k, ij] = -dvg(flux_air, k)
-                    dmasscov_consvar[k, ij] = -dvg(flux_consvar, k)
-                end
+            dvg = Stencils.div_form(vsph2, ij) # does not divide by Ai
+            @vec for k in krange
+                dmasscov_air[k, ij] = -dvg(flux_air, k)
+                dmasscov_consvar[k, ij] = -dvg(flux_consvar, k)
             end
         end
     end
@@ -216,17 +212,15 @@ function potential_vorticity!(PV_e_, PV_v_, model, ucov, mass_air)
     PV_v = similar!(PV_v_, fcov, nz, length(fcov))
     PV_e = similar!(PV_e_, ucov)
 
-    Av = vsphere.Av
-    vsph1 = merge(Stencils.curl(vsphere), Stencils.average_iv(vsphere))
+    vsph1 = merge(Stencils.curl(vsphere), Stencils.average_iv_form(vsphere))
     @with model.mgr, let (krange, ijrange) = axes(PV_v)
         @inbounds for ij in ijrange
             curl = Stencils.curl(vsph1, ij)
-            avg = Stencils.average_iv(vsph1, ij) # area-weighted average from cells to vertices
-            Av_ij = Av[ij]    # unit sphere cell area
+            avg = Stencils.average_iv_form(vsph1, ij) # area-weighted average from cells to vertices
             fcov_ij = fcov[ij]     # Coriolis * cell area Av
             @vec for k in krange
                 zeta = curl(ucov, k)   # vorticity * Av
-                mv = Av_ij * avg(mass_air, k)  # mass * Av
+                mv = avg(mass_air, k)  # mass * Av
                 PV_v[k, ij] = (zeta + fcov_ij) * inv(mv)
             end
         end
@@ -256,27 +250,23 @@ function Bernoulli!(B_, exner_, model, ucov, consvar, p, Phi)
     Exner = model.gas(:p, :consvar).exner_functions
 
     vsphere = model.domain.layer
-    degree = vsphere.primal_deg
-    vsph = Stencils.dot_product(vsphere) # extract only relevant fields
+    vsph = Stencils.dot_product_form(vsphere) # extract only relevant fields
 
     @with model.mgr,
     let (krange, ijrange) = axes(B)
         fl = debug_flags()
         @inbounds for ij in ijrange
-            deg = degree[ij]
-            # @assert deg in 5:7 "deg=$deg not in 5:7"
-            @unroll deg in 5:7 begin
-                dot_product = Stencils.dot_product(vsph, ij, Val(deg))
-                @vec for k in krange
-                    consvar_ijk = consvar[k, ij]
-                    h, v, exner_ijk = Exner(p[k, ij], consvar_ijk)
-                    ke = half_metric * dot_product(ucov, ucov, k)
-                    exner[k, ij] = exner_ijk
-                    B[k, ij] =
-                        (fl.Phi) * Phi[k, ij] +
-                        (fl.ke) * ke +
-                        (h - consvar_ijk * exner_ijk)
-                end
+            dot_product = Stencils.dot_product_form(vsph, ij)
+            inv_Ai = vsphere.inv_Ai[ij]
+            @vec for k in krange
+                consvar_ijk = consvar[k, ij]
+                h, v, exner_ijk = Exner(p[k, ij], consvar_ijk)
+                ke = half_metric * inv_Ai * dot_product(ucov, ucov, k)
+                exner[k, ij] = exner_ijk
+                B[k, ij] =
+                    (fl.Phi) * Phi[k, ij] +
+                    (fl.ke) * ke +
+                    (h - consvar_ijk * exner_ijk)
             end
         end
     end
@@ -289,7 +279,6 @@ end
 function curl_form!(ducov_, model, PV_e, flux_air, B, consvar, exner)
     ducov = similar!(ducov_, flux_air)
     vsphere = model.domain.layer
-    trisk_deg = vsphere.trisk_deg
 
     vsph = merge(Stencils.gradient(vsphere), 
                 Stencils.average_ie(vsphere),
@@ -301,17 +290,12 @@ function curl_form!(ducov_, model, PV_e, flux_air, B, consvar, exner)
         @inbounds for ij in ijrange
             grad = Stencils.gradient(vsph, ij) # covariant gradient
             avg = Stencils.average_ie(vsph, ij) # centered average from cells to edges
-
-            deg = trisk_deg[ij]
-            # @assert deg in 9:11 "deg=$deg not in 9:11"
-            @unroll deg in 9:11 begin
-                trisk = Stencils.TRiSK(vsph, ij, Val(deg))
-                @vec for k in krange
-                    gradB =
-                        (fl.gradB) * grad(B, k) +
-                        (fl.CgradExner) * avg(consvar, k) * grad(exner, k)
-                    ducov[k, ij] = (fl.qU) * trisk(flux_air, PV_e, k) - gradB
-                end
+            trisk = Stencils.TRiSK(vsph, ij)
+            @vec for k in krange
+                gradB =
+                    (fl.gradB) * grad(B, k) +
+                    (fl.CgradExner) * avg(consvar, k) * grad(exner, k)
+                ducov[k, ij] = (fl.qU) * trisk(flux_air, PV_e, k) - gradB
             end
         end
     end
@@ -357,21 +341,17 @@ end
 function slow_curl_form!(ducov_, B_, model, consvar, PV_e, flux_air, ucov)
     vsphere = model.domain.layer
     half_metric = (model.planet.radius^-2) / 2
-    degree = model.domain.layer.primal_deg
 
     B = similar!(B_, consvar) # kinetic energy
-    vsph1 = Stencils.dot_product(vsphere) # extract only relevant fields
+    vsph1 = Stencils.dot_product_form(vsphere) # extract only relevant fields
 
     @with model.mgr,
     let (krange, cells) = axes(B)
         @inbounds for cell in cells
-            deg = degree[cell]
-            # @assert deg in 5:7 "deg=$deg not in 5:7"
-            @unroll deg in 5:7 begin
-                dot_product = Stencils.dot_product(vsph1, cell, Val(deg))
-                @vec for k in krange
-                    B[k, cell] = half_metric * dot_product(ucov, ucov, k)
-                end
+            dot_product = Stencils.dot_product_form(vsph1, cell)
+            inv_Ai = vsphere.inv_Ai[cell]
+            @vec for k in krange
+                B[k, cell] = half_metric * inv_Ai * dot_product(ucov, ucov, k)
             end
         end
     end
@@ -383,13 +363,9 @@ function slow_curl_form!(ducov_, B_, model, consvar, PV_e, flux_air, ucov)
     let (krange, edges) = axes(ducov)
         @inbounds for edge in edges
             grad = Stencils.gradient(vsph2, edge) # covariant gradient
-            deg = vsph2.trisk_deg[edge]
-            # @assert deg in 9:11 "deg=$deg not in 9:11"
-            @unroll deg in 9:11 begin
-                trisk = Stencils.TRiSK(vsph2, edge, Val(deg))
-                @vec for k in krange
-                    ducov[k, edge] = trisk(flux_air, PV_e, k) - grad(B, k)
-                end
+            trisk = Stencils.TRiSK(vsph2, edge)
+            @vec for k in krange
+                ducov[k, edge] = trisk(flux_air, PV_e, k) - grad(B, k)
             end
         end
     end

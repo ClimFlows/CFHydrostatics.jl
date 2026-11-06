@@ -5,12 +5,11 @@ edges(sphere) = eachindex(sphere.xyz_e)
 
 # generic
 apply_primal(op, sphere, arg::Vector, more...) = [
-    (@unroll N in 5:7 op(sphere, cell, Val(N))(arg, more...)) for
-    (cell, N) in enumerate(sphere.primal_deg)
+    op(sphere, cell)(arg, more...) for cell in cells(sphere)
 ]
 apply_primal(op, sphere, arg::Matrix, more...) = [
-    (@unroll N in 5:7 op(sphere, cell, Val(N))(arg, more..., k)) for
-    k in axes(arg,1), (cell, N) in enumerate(sphere.primal_deg)
+    op(sphere, cell)(arg, more..., k) for
+    k in axes(arg,1), cell in cells(sphere)
 ]
 
 function apply_primal!(out_, mgr, op, sphere, arg::AbstractMatrix, more...)
@@ -18,12 +17,9 @@ function apply_primal!(out_, mgr, op, sphere, arg::AbstractMatrix, more...)
     @with mgr,
     let (krange, objs) = (axes(arg,1), cells(sphere))
         @inbounds for cell in objs
-            N = sphere.primal_deg[cell]
-            @unroll N in 5:7 begin
-                op_cell = op(sphere, cell, Val(N))
-                for k in krange
-                    out[k, cell] = op_cell(arg, more..., k)
-                end
+            op_cell = op(sphere, cell)
+            for k in krange
+                out[k, cell] = op_cell(arg, more..., k)
             end
         end
     end 
@@ -31,13 +27,12 @@ function apply_primal!(out_, mgr, op, sphere, arg::AbstractMatrix, more...)
 end
 
 apply_trisk(op, sphere, arg::Vector, more...) = [
-    (@unroll N in 9:10 op(sphere, edge, Val(N))(arg, more...)) for
-    (edge, N) in enumerate(sphere.trisk_deg)
+    op(sphere, edge)(arg, more...) for edge in edges(sphere)
 ]
 
 apply_trisk(op, sphere, arg::Matrix, more...) = [
-    (@unroll N in 9:10 op(sphere, edge, Val(N))(arg, more..., k)) for
-    k in axes(arg,1), (edge, N) in enumerate(sphere.trisk_deg)
+    op(sphere, edge)(arg, more..., k) for
+    k in axes(arg,1), edge in edges(sphere)
 ]
 
 function apply_trisk!(out_, mgr, op, sphere, arg::AbstractMatrix, more...)
@@ -45,13 +40,10 @@ function apply_trisk!(out_, mgr, op, sphere, arg::AbstractMatrix, more...)
     @with mgr,
     let (krange, objs) = (axes(arg,1), edges(sphere))
         @inbounds for edge in objs
-            N = sphere.trisk_deg[edge]
-            @unroll N in 9:10 begin
-                op_edge = op(sphere, edge, Val(N))
-                @simd for k in krange
-                    v = op_edge(arg, more..., k)
-                    out[k, edge] = v
-                end
+            op_edge = op(sphere, edge)
+            @simd for k in krange
+                v = op_edge(arg, more..., k)
+                out[k, edge] = v
             end
         end
     end 
@@ -99,11 +91,25 @@ gradient!(out, mgr, sphere, qi) = apply!(out, mgr, edges, Stencils.gradient, sph
 gradperp!(out, mgr, sphere, qv) = apply!(out, mgr, edges, Stencils.gradperp, sphere, qv)
 perp!(out, mgr, sphere, un) = apply!(out, mgr, edges, Stencils.perp, sphere, un)
 curl!(out, mgr, sphere, ue) = apply!(out, mgr, duals, Stencils.curl, sphere, ue)
-average_iv(out, mgr, sphere, qi) = apply!(out, mgr, duals, Stencils.average_iv, sphere, qi)
+average_iv(out, mgr, sphere, qi) = apply!(out, mgr, duals, Stencils.average_iv_form, sphere, qi)
 average_ie(out, mgr, sphere, qi) = apply!(out, mgr, edges, Stencils.average_ie, sphere, qi)
 average_ve(out, mgr, sphere, qv) = apply!(out, mgr, edges, Stencils.average_ve, sphere, qv)
 TRiSK!(out, mgr, sphere, args...) = apply_trisk!(out, mgr, Stencils.TRiSK, sphere, args...)
-divergence!(out, mgr, sphere, U) = apply_primal!(out, mgr, Stencils.divergence, sphere, U)
+
+function divergence!(out_, mgr, sphere, U)
+    out = similar!(out_, U, (size(U,1), length(cells(sphere))))
+    @with mgr,
+    let (krange, objs) = (axes(U,1), cells(sphere))
+        @inbounds for cell in objs
+            op = Stencils.div_form(sphere, cell)
+            inv_Ai = sphere.inv_Ai[cell]
+            for k in krange
+                out[k, cell] = inv_Ai * op(U, k)
+            end
+        end
+    end
+    return out
+end
 
 gradient3d(sphere, U) = apply_primal(Stencils.gradient3d, sphere, U)
 

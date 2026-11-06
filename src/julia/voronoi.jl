@@ -1,6 +1,7 @@
 module Voronoi
 
-using CFDomains: VoronoiSphere, shell, VHLayout
+using CFDomains: shell, VHLayout
+using VoronoiSpheres: VoronoiSphere
 using CFPlanets: ShallowTradPlanet, coriolis
 using CFHydrostatics: initial_HPE_VH_collocated
 import CFHydrostatics: HPE, initial_HPE_VH, HPE_diagnostics, HPE_tendencies!, HPE_remap!
