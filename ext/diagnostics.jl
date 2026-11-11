@@ -13,6 +13,7 @@ using SHTnsSpheres:
 using ManagedLoops: @with, @vec
 
 using ..Dynamics
+using ..SHTnsSpheres_Ext: with_auxiliary_sphere
 
 function diagnostics()
     return CookBook(;
@@ -55,7 +56,9 @@ function uv(model, state)
 end
 
 function surface_pressure(model, ps_spec)
-    return synthesis_scalar!(void, ps_spec[:, 1], model.domain.layer) .+ model.vcoord.ptop
+    return with_auxiliary_sphere(model.domain.layer, 1) do sph
+        synthesis_scalar!(void, ps_spec[:, 1], sph) .+ model.vcoord.ptop
+    end
 end
 
 function pressure(model, masses)
@@ -80,10 +83,11 @@ function geopotential(model, masses, pressure)
     Phi = similar(pressure, size(pressure) .+ (0, 0, 1))
     vol = model.gas(:p, :consvar).specific_volume
     p = pressure
+    Phis = model.Phis
     @with model.mgr let (irange, jrange) = (axes(p, 1), axes(p, 2))
         for j in jrange
             @vec for i in irange
-                Phi[i, j, 1] = model.Phis[i, j]
+                Phi[i, j, 1] = Phis[i, j]
             end
             for k in axes(p, 3)
                 @vec for i in irange
@@ -142,8 +146,8 @@ function Phi_dot(model, uv, gradPhi_cov, dgeopotential)
     dPhi = dgeopotential
     # apply factor 1/radius to convert physical velocities (ux,uy) to contravariant (=angular)
     factor = inv(model.planet.radius)
-    @with model.mgr let (irange, jrange, krange) = axes(Phi_dot_k)
-        for j in jrange, k in krange
+    @with model.mgr let (irange, jrange) = (axes(Phi_dot_k, 1), axes(Phi_dot_k, 2))
+        for j in jrange, k in axes(Phi_dot_k, 3)
             @vec for i in irange
                 gradx = Phi_x[i, j, k] + Phi_x[i, j, k + 1]
                 grady = Phi_y[i, j, k] + Phi_y[i, j, k + 1]
@@ -225,9 +229,10 @@ dstate(dstate_all) = dstate_all[1]
 ps_spec(model, state) = (model.planet.radius^-2) * sum(state.mass_air_spec; dims=2)
 
 function gradPhi_cov(model, geopotential)
-    sph = model.domain.layer
-    Phi_spec = analysis_scalar!(void, geopotential, sph)
-    return synthesis_spheroidal!(void, Phi_spec, sph)
+    return with_auxiliary_sphere(model.domain.layer, size(geopotential, 3)) do sph
+        Phi_spec = analysis_scalar!(void, geopotential, sph)
+        synthesis_spheroidal!(void, Phi_spec, sph)
+    end
 end
 
 function gradmass(model, state)
@@ -239,7 +244,9 @@ end
 dstate_all(model, state) = Dynamics.tendencies!(void, void, model, state, 0.0)
 
 function ugradps(model, uv, ps_spec)
-    gradx, grady = synthesis_spheroidal!(void, ps_spec[:, 1], model.domain.layer)
+    gradx, grady = with_auxiliary_sphere(model.domain.layer, 1) do sph
+        synthesis_spheroidal!(void, ps_spec[:, 1], sph)
+    end
     ux, uy = uv.ucolat, uv.ulon
     # apply factor 1/radius to convert physical velocities (ux,uy) to contravariant (=angular)
     return @. (1 / model.planet.radius) * (ux * gradx + uy * grady)

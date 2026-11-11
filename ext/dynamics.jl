@@ -262,12 +262,12 @@ end
 # Footgun: do not reassign to variable names if they are used inside the let ... end block, e.g.
 #   p = similar!(p, mass)
 
-function hydrostatic_pressure!(p_, model, mass::Array{Float64,3})
+function hydrostatic_pressure!(p_, model, mass::AbstractArray{<:Real,3})
     p = similar!(p_, mass)
+    ptop, nz = model.vcoord.ptop, size(p, 3)
+    half_metric = model.planet.radius^-2 / 2
     @with model.mgr,
     let (irange, jrange) = (axes(p, 1), axes(p, 2))
-        ptop, nz = model.vcoord.ptop, size(p, 3)
-        half_metric = model.planet.radius^-2 / 2
         @inbounds for j in jrange
             @vec for i in irange
                 p[i, j, nz] = ptop + half_metric * mass[i, j, nz]
@@ -287,12 +287,12 @@ function Bernoulli!((B_, exner_, consvar_, Phi_), (mass_air, mass_consvar, p, uv
     consvar = similar!(consvar_, p)
     Phi = @. Phi_ = model.Phis
 
+    flags = debug_flags()
+    ux, uy = uv.ucolat, uv.ulon
+    metric = model.planet.radius^-2
+    Exner = model.gas(:p, :consvar).exner_functions
     @with model.mgr,
     let (irange, jrange) = (axes(p, 1), axes(p, 2))
-        flags = debug_flags()
-        ux, uy = uv.ucolat, uv.ulon
-        metric = model.planet.radius^-2
-        Exner = model.gas(:p, :consvar).exner_functions
         @inbounds for j in jrange
             for k in axes(p, 3)
                 @vec for i in irange
@@ -318,11 +318,11 @@ function Bernoulli_fast!((B_, exner_, consvar_, Phi_), (mass_air, mass_consvar, 
     consvar = similar!(consvar_, p)
     Phi = @. Phi_ = model.Phis
 
+    flags = debug_flags()
+    metric = model.planet.radius^-2
+    Exner = model.gas(:p, :consvar).exner_functions
     @with model.mgr,
     let (irange, jrange) = (axes(p, 1), axes(p, 2))
-        flags = debug_flags()
-        metric = model.planet.radius^-2
-        Exner = model.gas(:p, :consvar).exner_functions
         @inbounds for j in jrange
             for k in axes(p, 3)
                 @vec for i in irange
