@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.5.4
+
+### Fixed
+
+- Allocate dual-cell potential vorticity scratch with the state element type.
+  This allows forward-mode differentiation of the Voronoi dynamics with fixed
+  mesh and model parameters.
+
+### Tests
+
+- Check Enzyme reverse derivatives against ForwardDiff for Voronoi tendencies,
+  RK4 steps and vertical remapping.
+
 ## 0.5.3
 
 ### Changed

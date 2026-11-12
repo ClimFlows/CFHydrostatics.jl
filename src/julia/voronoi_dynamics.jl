@@ -209,7 +209,7 @@ end
 function potential_vorticity!(PV_e_, PV_v_, model, ucov, mass_air)
     fcov, vsphere = model.fcov, model.domain.layer
     nz = size(ucov, 1)
-    PV_v = similar!(PV_v_, fcov, nz, length(fcov))
+    PV_v = similar!(PV_v_, fcov, eltype(ucov), nz, length(fcov))
     PV_e = similar!(PV_e_, ucov)
 
     vsph1 = merge(Stencils.curl(vsphere), Stencils.average_iv_form(vsphere))
