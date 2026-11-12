@@ -9,19 +9,6 @@ using CFHydrostatics.RemapCollocated: remap!
 
 import CFHydrostatics: HPE, initial_HPE_HV, HPE_diagnostics, HPE_tendencies!, HPE_remap!
 
-# CUDA SHTns plans have a fixed batch size. Surface and interface
-# diagnostics use plans with a different batch size from the dynamics.
-with_auxiliary_sphere(f, sph, batch) = with_auxiliary_sphere(f, sph, batch, sph.lon)
-with_auxiliary_sphere(f, sph, _, ::Array) = f(sph)
-function with_auxiliary_sphere(f, sph, batch, grid)
-    aux = SHTnsSphere(sph.nlat; backend=:cuda, precision=eltype(grid), batch)
-    try
-        return f(aux)
-    finally
-        close(aux)
-    end
-end
-
 host_grid(a::Array) = a
 host_grid(a) = Array(a)
 
@@ -33,9 +20,7 @@ function HPE(params, mgr, sph::SHTnsSphere, vcoord, geopotential, gas)
     planet = ShallowTradPlanet(radius, Omega)
     fcov = coriolis.(Ref(planet), lon, lat)
     Phis = to_grid(lon, geopotential.(host_grid(lon), host_grid(lat)))
-    Phis = with_auxiliary_sphere(sph, 1) do surface
-        synthesis_scalar!(void, analysis_scalar!(void, Phis, surface), surface)
-    end
+    Phis = synthesis_scalar!(void, analysis_scalar!(void, Phis, sph), sph) # project onto spherical harmonics
     return HPE(mgr, vcoord, planet, shell(params.nz, sph), gas, fcov, Phis)
 end
 

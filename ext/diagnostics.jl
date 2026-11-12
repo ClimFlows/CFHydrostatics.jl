@@ -13,7 +13,6 @@ using SHTnsSpheres:
 using ManagedLoops: @with, @vec
 
 using ..Dynamics
-using ..SHTnsSpheres_Ext: with_auxiliary_sphere
 
 function diagnostics()
     return CookBook(;
@@ -56,9 +55,7 @@ function uv(model, state)
 end
 
 function surface_pressure(model, ps_spec)
-    return with_auxiliary_sphere(model.domain.layer, 1) do sph
-        synthesis_scalar!(void, ps_spec[:, 1], sph) .+ model.vcoord.ptop
-    end
+    return synthesis_scalar!(void, ps_spec[:, 1], model.domain.layer) .+ model.vcoord.ptop
 end
 
 function pressure(model, masses)
@@ -229,10 +226,9 @@ dstate(dstate_all) = dstate_all[1]
 ps_spec(model, state) = (model.planet.radius^-2) * sum(state.mass_air_spec; dims=2)
 
 function gradPhi_cov(model, geopotential)
-    return with_auxiliary_sphere(model.domain.layer, size(geopotential, 3)) do sph
-        Phi_spec = analysis_scalar!(void, geopotential, sph)
-        synthesis_spheroidal!(void, Phi_spec, sph)
-    end
+    sph = model.domain.layer
+    Phi_spec = analysis_scalar!(void, geopotential, sph)
+    return synthesis_spheroidal!(void, Phi_spec, sph)
 end
 
 function gradmass(model, state)
@@ -244,9 +240,7 @@ end
 dstate_all(model, state) = Dynamics.tendencies!(void, void, model, state, 0.0)
 
 function ugradps(model, uv, ps_spec)
-    gradx, grady = with_auxiliary_sphere(model.domain.layer, 1) do sph
-        synthesis_spheroidal!(void, ps_spec[:, 1], sph)
-    end
+    gradx, grady = synthesis_spheroidal!(void, ps_spec[:, 1], model.domain.layer)
     ux, uy = uv.ucolat, uv.ulon
     # apply factor 1/radius to convert physical velocities (ux,uy) to contravariant (=angular)
     return @. (1 / model.planet.radius) * (ux * gradx + uy * grady)
