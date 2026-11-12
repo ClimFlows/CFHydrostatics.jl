@@ -259,6 +259,7 @@ end
 #========== hydrostatic balance and geopotential computation ==========
 =======================================================================#
 
+# Prepare loop-invariant inputs before @with so GPU loops capture only what they use.
 # Footgun: do not reassign to variable names if they are used inside the let ... end block, e.g.
 #   p = similar!(p, mass)
 
