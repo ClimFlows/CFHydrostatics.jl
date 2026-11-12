@@ -1,4 +1,4 @@
-using LinearAlgebra: dot, norm
+import LinearAlgebra
 using Random: MersenneTwister
 
 function voronoi_adjoint_case()
@@ -11,12 +11,12 @@ function voronoi_adjoint_case()
     return setup_voronoi(VoronoiSphere(reader; prec=Float64), choices, params, PlainCPU())
 end
 
-field_dot(x, y) = sum(map(dot, values(x), values(y)))
+field_dot(x, y) = sum(map(LinearAlgebra.dot, values(x), values(y)))
 
 function check_voronoi_adjoint(reference, run!, output, state, args...)
     rng = MersenneTwister(137)
-    direction = map(x -> randn(rng, size(x)) .* (norm(x) / sqrt(length(x))), state)
-    weights = map(x -> randn(rng, size(x)) ./ max(norm(x), 1.0), output)
+    direction = map(x -> randn(rng, size(x)) .* (LinearAlgebra.norm(x) / sqrt(length(x))), state)
+    weights = map(x -> randn(rng, size(x)) ./ max(LinearAlgebra.norm(x), 1.0), output)
     shadow = make_zero(state)
     directional = ForwardDiff.derivative(0.0) do t
         input = map((x, dx) -> x .+ t .* dx, state, direction)
