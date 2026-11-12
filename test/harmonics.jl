@@ -54,6 +54,14 @@ function harmonics()
     @twice dstate, scratch = CFHydrostatics.HPE_tendencies!(dstate, scratch, spmodel,
                                                             sph, state0, z)
 
+    @testset "Spectral diagnostics" begin
+        session = open(diags; model=spmodel, state=state0)
+        @test session.surface_pressure ≈ dropdims(sum(session.masses.air; dims=3); dims=3) .+ params.ptop
+        @test session.geopotential[:, :, 1] == spmodel.Phis
+        @test size(session.Phi_dot) == (sph.nlat, sph.nlon, choices.nz)
+        @test all(isfinite, session.Phi_dot)
+    end
+
     @info "Spectral model time integration" choices.TimeScheme
     scheme = choices.TimeScheme(spmodel)
     scratch_scheme = CFTimeSchemes.scratch_space(scheme, state0, z)
