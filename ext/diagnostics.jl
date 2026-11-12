@@ -80,10 +80,11 @@ function geopotential(model, masses, pressure)
     Phi = similar(pressure, size(pressure) .+ (0, 0, 1))
     vol = model.gas(:p, :consvar).specific_volume
     p = pressure
+    Phis = model.Phis
     @with model.mgr let (irange, jrange) = (axes(p, 1), axes(p, 2))
         for j in jrange
             @vec for i in irange
-                Phi[i, j, 1] = model.Phis[i, j]
+                Phi[i, j, 1] = Phis[i, j]
             end
             for k in axes(p, 3)
                 @vec for i in irange
@@ -142,8 +143,8 @@ function Phi_dot(model, uv, gradPhi_cov, dgeopotential)
     dPhi = dgeopotential
     # apply factor 1/radius to convert physical velocities (ux,uy) to contravariant (=angular)
     factor = inv(model.planet.radius)
-    @with model.mgr let (irange, jrange, krange) = axes(Phi_dot_k)
-        for j in jrange, k in krange
+    @with model.mgr let (irange, jrange) = (axes(Phi_dot_k, 1), axes(Phi_dot_k, 2))
+        for j in jrange, k in axes(Phi_dot_k, 3)
             @vec for i in irange
                 gradx = Phi_x[i, j, k] + Phi_x[i, j, k + 1]
                 grady = Phi_y[i, j, k] + Phi_y[i, j, k + 1]

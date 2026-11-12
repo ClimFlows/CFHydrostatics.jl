@@ -10,3 +10,14 @@
 - geometry: traditional, shallow-atmosphere
 - spatial discretization: spectral or Voronoi
 - temporal discretization: explicit or IMEX
+
+## Spectral models on CUDA
+
+Use SHTnsSpheres 0.2.19 or later, a CUDA `SHTnsSphere`, and a CUDA loop
+manager. Use the same precision for the sphere and the model parameters.
+Initial conditions are sampled on the CPU and transferred to the CUDA grid.
+
+Dynamics and diagnostics share the model's sphere. Its SHTns plans for
+surface, layer, and interface fields are reused across diagnostic sessions.
+See the [SpectralHPE example](https://github.com/ClimFlows/ClimFlowsExamples/tree/main/SpectralHPE.jl)
+for a complete model setup.

@@ -32,6 +32,10 @@ This object is to be used as follows:
     ...
 
 with `state` the current state, obtained for instance from `initial_HPE`.
+
+Spectral diagnostics use the model's sphere for surface, layer, and interface
+fields. On CUDA, that sphere reuses its SHTns plan for each batch size across
+diagnostic sessions.
 """
 diagnostics(model::HPE) = HPE_diagnostics(model, model.domain.layer)
 
@@ -47,6 +51,14 @@ vertical_remap!(backend, model, new, scratch, now) =
 # implemented in SHTnsSpheres_Ext
 """
     model = HPE(params, mgr, layer, vcoord, surface_geopotential, gas)
+
+Construct a hydrostatic model with horizontal discretization `layer`, vertical
+coordinate `vcoord`, and fluid `gas`. The loop manager `mgr` selects where
+managed loops run.
+
+For spectral CUDA models, pass a CUDA loop manager and a CUDA
+`SHTnsSphere` with the same precision as the model parameters. The sphere
+provides the transform plans used by both the dynamics and diagnostics.
 """
 function HPE end
 function HPE_diagnostics end
