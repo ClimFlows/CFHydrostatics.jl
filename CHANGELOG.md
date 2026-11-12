@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.5.3
+
+### Changed
+
+- Compute the spectral model's grid-space mass and momentum flux components in
+  fused managed loops. The model's loop manager selects the execution backend.
+
 ## 0.5.2
 
 ### Added

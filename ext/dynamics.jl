@@ -50,6 +50,7 @@ function tendencies!(dstate, scratch, model, state, t)
             sph,
             sph.laplace,
             metric,
+            model.mgr,
         )
 
     # hydrostatic balance, geopotential, exner function
@@ -66,6 +67,7 @@ function tendencies!(dstate, scratch, model, state, t)
         sph.laplace,
         metric,
         fcov,
+        model.mgr,
     )
 
     locals = (; uv, mass_air, mass_consvar, p, B, exner, consvar, geopot)
@@ -126,7 +128,7 @@ end
        => scale flux by contravariant metric factor radius^-2
 ========================================================================#
 
-function mass_budgets!(outputs, locals, inputs, sph, laplace, factor)
+function mass_budgets!(outputs, locals, inputs, sph, laplace, factor, mgr)
     (; mass_air_spec, mass_consvar_spec, uv_spec) = inputs
     (; dmass_air_spec, dmass_consvar_spec, uv, mass_air, mass_consvar) = outputs
     (; fx, fy, flux_air_spec, fcx, fcy, flux_consvar_spec) = locals
@@ -134,14 +136,13 @@ function mass_budgets!(outputs, locals, inputs, sph, laplace, factor)
     (ux, uy) = uv = synthesis_vector!(uv, uv_spec, sph)
 
     mass_air = synthesis_scalar!(mass_air, mass_air_spec, sph)
-    fx = @. fx = -factor * ux * mass_air
-    fy = @. fy = -factor * uy * mass_air
+    mass_consvar = synthesis_scalar!(mass_consvar, mass_consvar_spec, sph)
+    fx, fy = similar!(fx, mass_air), similar!(fy, mass_air)
+    fcx, fcy = similar!(fcx, mass_consvar), similar!(fcy, mass_consvar)
+    mass_fluxes!(mgr, (fx, fy, fcx, fcy), (ux, uy, mass_air, mass_consvar), factor)
     flux_air_spec = analysis_vector!(flux_air_spec, erase(vector_spat(fx, fy)), sph)
     dmass_air_spec = @. dmass_air_spec = flux_air_spec.spheroidal * laplace
 
-    mass_consvar = synthesis_scalar!(mass_consvar, mass_consvar_spec, sph)
-    fcx = @. fcx = -factor * ux * mass_consvar
-    fcy = @. fcy = -factor * uy * mass_consvar
     flux_consvar_spec =
         analysis_vector!(flux_consvar_spec, erase(vector_spat(fcx, fcy)), sph)
     dmass_consvar_spec = @. dmass_consvar_spec = flux_consvar_spec.spheroidal * laplace
@@ -160,7 +161,7 @@ end
        => scale B and qflux by contravariant metric factor radius^-2
 ==================================================================#
 
-function curl_form!(outputs, locals, inputs, sph, laplace, factor, fcov)
+function curl_form!(outputs, locals, inputs, sph, laplace, factor, fcov, mgr)
     (; exner, consvar, B, uv_spec, uv) = inputs
     (; duv_spec) = outputs
     (; qflux_spec, B_spec, fx, fy, zeta, zeta_spec, grad_exner, exner_spec) = locals
@@ -172,8 +173,8 @@ function curl_form!(outputs, locals, inputs, sph, laplace, factor, fcov)
     zeta_spec = @. zeta_spec = -laplace * uv_spec.toroidal # curl
     zeta = synthesis_scalar!(zeta, zeta_spec, sph)
     (ux, uy) = uv
-    fx = @. fx =  (flags.qU) * factor * (zeta + fcov) * uy - (flags.CgradExner)*consvar * gradx
-    fy = @. fy = -(flags.qU) * factor * (zeta + fcov) * ux - (flags.CgradExner)*consvar * grady
+    fx, fy = similar!(fx, ux), similar!(fy, uy)
+    momentum_fluxes!(mgr, (fx, fy), (ux, uy, zeta, consvar, gradx, grady), fcov, factor, flags)
 
     qflux_spec = analysis_vector!(qflux_spec, erase(vector_spat(fx, fy)), sph)
 
@@ -184,6 +185,41 @@ function curl_form!(outputs, locals, inputs, sph, laplace, factor, fcov)
     )
     return (; duv_spec),
     (; qflux_spec, B_spec, fx, fy, zeta, zeta_spec, grad_exner, exner_spec)
+end
+
+flatten_grid(x) = reshape(x, :, size(x, 3))
+
+function mass_fluxes!(mgr, fluxes, inputs, factor)
+    fx, fy, fcx, fcy = map(flatten_grid, fluxes)
+    ux, uy, air, consvar = map(flatten_grid, inputs)
+    @with mgr let (irange, krange) = axes(air)
+        @inbounds for k in krange
+            @vec for i in irange
+                u = -factor * ux[i, k]
+                v = -factor * uy[i, k]
+                fx[i, k] = u * air[i, k]
+                fy[i, k] = v * air[i, k]
+                fcx[i, k] = u * consvar[i, k]
+                fcy[i, k] = v * consvar[i, k]
+            end
+        end
+    end
+end
+
+function momentum_fluxes!(mgr, fluxes, inputs, fcov, factor, flags)
+    fx, fy = map(flatten_grid, fluxes)
+    ux, uy, zeta, consvar, gradx, grady = map(flatten_grid, inputs)
+    fc = vec(fcov)
+    @with mgr let (irange, krange) = axes(ux)
+        @inbounds for k in krange
+            @vec for i in irange
+                f = (flags.qU) * factor * (zeta[i, k] + fc[i])
+                c = (flags.CgradExner) * consvar[i, k]
+                fx[i, k] = f * uy[i, k] - c * gradx[i, k]
+                fy[i, k] = -f * ux[i, k] - c * grady[i, k]
+            end
+        end
+    end
 end
 
 function curl_form_fast!(duv_spec_fast, locals, inputs, sph)
