@@ -76,23 +76,19 @@ function harmonics()
 
     nstep = 50
     @info "Spectral model Enzyme adjoint" nstep
-    if Base.VERSION >= v"1.10" && Base.VERSION < v"1.11"
-        test_autodiff(Ext.Dynamics.tendencies!,
-                      Dup(dstate), Dup(scratch), Const(spmodel), Dup(state0), Const(z))
+    test_autodiff(Ext.Dynamics.tendencies!,
+                  Dup(dstate), Dup(scratch), Const(spmodel), Dup(state0), Const(z))
 
-        test_autodiff(CFTimeSchemes.advance!, Dup(future),
-                      Const(scheme), Dup(state0), Const(z), Const(z), Dup(scratch_scheme))
+    test_autodiff(CFTimeSchemes.advance!, Dup(future),
+                  Const(scheme), Dup(state0), Const(z), Const(z), Dup(scratch_scheme))
 
-        function repeat_advance!(sch, fut, scr)
-            repeat(nstep, fut, scr, nothing) do st, scr, _
-                CFTimeSchemes.advance!(st, sch, st, z, z, scr)
-                return nothing # required !
-            end
+    function repeat_advance!(sch, fut, scr)
+        repeat(nstep, fut, scr, nothing) do st, scr, _
+            CFTimeSchemes.advance!(st, sch, st, z, z, scr)
+            return nothing # required !
         end
-        test_autodiff(repeat_advance!, Dup(scheme), Dup(future), Dup(scratch_scheme))
-    else
-        @warn "Enzyme is expected to work only with Julia 1.10 at this time."
     end
+    test_autodiff(repeat_advance!, Dup(scheme), Dup(future), Dup(scratch_scheme))
 end
 
 Dup(x) = Duplicated(x, make_zero(x))
@@ -101,5 +97,6 @@ function test_autodiff(fun, args...)
     @info fun
     vargs = map(x -> x.val, args)
     @twice fun(vargs...)
-    @twice autodiff(Reverse, Const(fun), Const, args...)
+    # Broadcasts may mix constant model data with active state arrays.
+    @twice autodiff(Enzyme.set_runtime_activity(Reverse), Const(fun), Const, args...)
 end
