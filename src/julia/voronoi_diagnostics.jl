@@ -172,7 +172,8 @@ function lonlat_from_cov(model, state)
         sinlat,
     )
     function work(ucov)
-        ulon, ulat = similar(state.mass_air), similar(state.mass_air)
+        dims = size(state.masscov_air)
+        ulon, ulat = similar(ucov, dims), similar(ucov, dims)
         primal_lonlat_from_cov!(ulon, ulat, ucov, args...) do ij, ulon_ij, ulat_ij
             CFPlanets.lonlat_from_cov(ulon_ij, ulat_ij, lon[ij], lat[ij], planet)
         end

@@ -63,9 +63,11 @@ end
 #=========================== API for IMEX time scheme =======================#
 
 function tendencies_HV!(slow, fast, tmp, model, state, t, tau)
-    (; mass_air, mass_consvar, ucov) = state
+    (; masscov_air, masscov_consvar, ucov) = state
 
-    mass_air, consvar = consvar!(tmp.mass_budget.mass_air, tmp.mass_budget.consvar, model, masscov_air, mass_consvar)
+    mass_air, consvar = consvar!(
+        tmp.mass_budget.mass_air, tmp.mass_budget.consvar, model, masscov_air, masscov_consvar,
+    )
 
     # fast tendencies: 0, 0, -( ∇(Φ+h-θπ)+θ∇π )
 
@@ -81,14 +83,15 @@ function tendencies_HV!(slow, fast, tmp, model, state, t, tau)
     Phi = transpose!(Phi, model.mgr, Phi_HV)
 
     #   update ucov with fast tendency
-    fast_ucov, fast_B, exner = fast_ucov!(fast.ucov, fast_B, exner, model, ucov, Phi, pressure, consvar)
-    new_ucov = @. tmp.fast.new_ucov = ucov + tau*fast_ucov
+    fast_du, fast_B, exner = fast_ucov!(fast.ucov, fast_B, exner, model, ucov, Phi, pressure, consvar)
+    new_ucov = similar!(tmp.fast.new_ucov, ucov)
+    @. new_ucov = ucov + tau * fast_du
 
     # slow tendencies: -∇⋅U, -∇⋅θU, -(ζ×u + ∇u²/2)
     #   flux-form mass budgets
     (; flux_air, flux_consvar) = tmp.mass_budget
-    dmass_air, dmass_consvar, flux_air, flux_consvar = mass_budget!(
-        (slow.mass_air, slow.mass_consvar, flux_air, flux_consvar, consvar),
+    dmasscov_air, dmasscov_consvar, flux_air, flux_consvar = mass_budget!(
+        (slow.masscov_air, slow.masscov_consvar, flux_air, flux_consvar),
         model,
         (mass_air, consvar, new_ucov),
     )
@@ -99,9 +102,9 @@ function tendencies_HV!(slow, fast, tmp, model, state, t, tau)
     slow_ucov, KE = slow_curl_form!(slow.ucov, KE, model, consvar, PV_e, flux_air, new_ucov)
 
     # wrap up
-    zero_mass = zero_array(dmass_air)
-    fast = (mass_air=zero_mass, mass_consvar=zero_mass, ucov=fast_ucov)
-    slow = (mass_air=dmass_air, mass_consvar=dmass_consvar, ucov=slow_ucov)
+    zero_mass = zero_array(dmasscov_air)
+    fast = (masscov_air=zero_mass, masscov_consvar=zero_mass, ucov=fast_du)
+    slow = (masscov_air=dmasscov_air, masscov_consvar=dmasscov_consvar, ucov=slow_ucov)
 
     tmp = (
         HV = (; consvar_HV, mass_air_HV, pressure_HV, Phi_HV),

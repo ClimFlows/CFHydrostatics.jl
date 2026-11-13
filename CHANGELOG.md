@@ -4,6 +4,10 @@
 
 ### Fixed
 
+- Restore the slow and fast tendencies for Voronoi IMEX schemes using
+  covariant mass fields.
+- Allocate the Voronoi wind diagnostic using the current state layout.
+
 - Allocate dual-cell potential vorticity scratch with the state element type.
   This allows forward-mode differentiation of the Voronoi dynamics with fixed
   mesh and model parameters.
