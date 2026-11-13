@@ -21,3 +21,11 @@ Dynamics and diagnostics share the model's sphere. Its SHTns plans for
 surface, layer, and interface fields are reused across diagnostic sessions.
 See the [SpectralHPE example](https://github.com/ClimFlows/ClimFlowsExamples/tree/main/SpectralHPE.jl)
 for a complete model setup.
+
+## Voronoi adjoints
+
+When Enzyme is loaded, an optional extension supplies a custom reverse rule for
+the Voronoi mass budget. It composes the custom adjoints of VoronoiSpheres
+operators, including the returned tracer flux, and supports CPU and CUDA arrays.
+Full GPU reverse differentiation of the HPE tendencies remains incomplete; the
+hydrostatic column kernel is the next KernelAbstractions–Enzyme limitation.
