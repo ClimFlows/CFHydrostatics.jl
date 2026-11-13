@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.5.5
+
+### Added
+
+- Add an Enzyme custom reverse rule for the Voronoi mass budget on CPU and GPU,
+  composed from VoronoiSpheres operator adjoints. Preserve and differentiate the
+  returned tracer flux through the new `CenteredTracerFlux` operator.
+
 ## 0.5.4
 
 ### Fixed

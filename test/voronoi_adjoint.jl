@@ -13,6 +13,13 @@ end
 
 field_dot(x, y) = sum(map(LinearAlgebra.dot, values(x), values(y)))
 
+function voronoi_mass_budget!(out, fields, model)
+    Dyn = CFHydrostatics.Voronoi.Dynamics
+    Dyn.mass_budget!((out.masscov_air, out.masscov_consvar,
+                      out.flux_air, out.flux_consvar), model, values(fields))
+    return nothing
+end
+
 function check_voronoi_adjoint(reference, run!, output, state, args...; difference_step=nothing)
     rng = MersenneTwister(137)
     F = eltype(state.ucov)
@@ -105,6 +112,26 @@ end
 
 @testset "Voronoi HPE adjoint" begin
     model, _, state = voronoi_adjoint_case()
+    Dyn = CFHydrostatics.Voronoi.Dynamics
+    mass_air, consvar = Dyn.consvar!(void, void, model,
+                                     state.masscov_air, state.masscov_consvar)
+    fields = (; mass_air, consvar, ucov=state.ucov)
+    budget = Dyn.mass_budget!((void, void, void, void), model, values(fields))
+    budget_output = (masscov_air=budget[1], masscov_consvar=budget[2],
+                    flux_air=budget[3], flux_consvar=budget[4])
+    expected_flux_consvar = [budget[3][k, edge] *
+                             Stencils.average_ie(model.domain.layer, edge)(consvar, k)
+                             for k in axes(consvar, 1), edge in axes(budget[3], 2)]
+    @test budget[4] ≈ expected_flux_consvar
+    @testset "Mass budget" begin
+        check_voronoi_adjoint(voronoi_mass_budget!, budget_output, fields,
+                              Const(model)) do input
+            result = Dyn.mass_budget!((void, void, void, void), model, values(input))
+            return (masscov_air=result[1], masscov_consvar=result[2],
+                    flux_air=result[3], flux_consvar=result[4])
+        end
+    end
+
     tendencies, scratch = CFTimeSchemes.tendencies!(void, void, model, state, 0.0)
     @testset "Tendencies" begin
         check_voronoi_adjoint(voronoi_tendencies!, tendencies, state,

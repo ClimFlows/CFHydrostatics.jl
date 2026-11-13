@@ -1,4 +1,6 @@
 # mesh objects
+import VoronoiSpheres.Operators as Ops
+
 cells(sphere) = eachindex(sphere.xyz_i)
 duals(sphere) = eachindex(sphere.xyz_v)
 edges(sphere) = eachindex(sphere.xyz_e)
@@ -20,30 +22,6 @@ function apply_primal!(out_, mgr, op, sphere, arg::AbstractMatrix, more...)
             op_cell = op(sphere, cell)
             for k in krange
                 out[k, cell] = op_cell(arg, more..., k)
-            end
-        end
-    end 
-    return out
-end
-
-apply_trisk(op, sphere, arg::Vector, more...) = [
-    op(sphere, edge)(arg, more...) for edge in edges(sphere)
-]
-
-apply_trisk(op, sphere, arg::Matrix, more...) = [
-    op(sphere, edge)(arg, more..., k) for
-    k in axes(arg,1), edge in edges(sphere)
-]
-
-function apply_trisk!(out_, mgr, op, sphere, arg::AbstractMatrix, more...)
-    out = similar!(out_, arg, (size(arg,1), length(edges(sphere))))
-    @with mgr,
-    let (krange, objs) = (axes(arg,1), edges(sphere))
-        @inbounds for edge in objs
-            op_edge = op(sphere, edge)
-            @simd for k in krange
-                v = op_edge(arg, more..., k)
-                out[k, edge] = v
             end
         end
     end 
@@ -94,7 +72,11 @@ curl!(out, mgr, sphere, ue) = apply!(out, mgr, duals, Stencils.curl, sphere, ue)
 average_iv(out, mgr, sphere, qi) = apply!(out, mgr, duals, Stencils.average_iv_form, sphere, qi)
 average_ie(out, mgr, sphere, qi) = apply!(out, mgr, edges, Stencils.average_ie, sphere, qi)
 average_ve(out, mgr, sphere, qv) = apply!(out, mgr, edges, Stencils.average_ve, sphere, qv)
-TRiSK!(out, mgr, sphere, args...) = apply_trisk!(out, mgr, Stencils.TRiSK, sphere, args...)
+function TRiSK!(out_, mgr, sphere, ue)
+    out = similar!(out_, ue, (size(ue, 1), length(edges(sphere))))
+    Ops.TRiSK(sphere)(out, mgr, ue)
+    return out
+end
 
 function divergence!(out_, mgr, sphere, U)
     out = similar!(out_, U, (size(U,1), length(cells(sphere))))

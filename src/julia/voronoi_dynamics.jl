@@ -4,7 +4,10 @@ using CFPlanets: lonlat_from_cov
 using ManagedLoops: @with, @vec
 using MutatingOrNot: Void, void, similar!
 using CFDomains.ZeroArrays: zero_array
+using CFDomains.LazyOperators: setminus!
+using CFDomains.LazyExpressions: @lazy
 using CFDomains: transpose!
+import VoronoiSpheres.Operators as Ops
 using VoronoiSpheres: Stencils
 using CFHydrostatics: debug_flags
 
@@ -149,30 +152,20 @@ function mass_budget!(
     flux_air = similar!(flux_air_, ucov)
     flux_consvar = similar!(flux_consvar_, ucov)
 
-    vsphere, metric = model.domain.layer, model.planet.radius^-2
-    vsph = merge(Stencils.centered_flux(vsphere), Stencils.average_ie(vsphere))
+    vsphere = model.domain.layer
+    metric = model.planet.radius^-2
 
-    @with model.mgr, let (krange, ijrange) = axes(flux_air)
-        @inbounds for ij in ijrange
-            flux = Stencils.centered_flux(vsph, ij)
-            avg = Stencils.average_ie(vsph, ij)
-            @vec for k in krange
-                flux_air[k, ij] = metric * flux(mass_air, ucov, k)
-                flux_consvar[k, ij] = flux_air[k, ij] * avg(consvar, k)
-            end
-        end
-    end
+    centered_flux! = Ops.CenteredFlux(vsphere)
+    centered_tracer_flux! = Ops.CenteredTracerFlux(vsphere)
+    minus_divergence! = Ops.Divergence(vsphere, setminus!)
+    minus_div_centered_flux! = Ops.DivCenteredFlux(vsphere, setminus!)
+    @lazy metric_mass(mass_air; metric) = metric * mass_air
 
-    vsph2 = Stencils.div_form(vsphere)
-    @with model.mgr, let (krange, ijrange) = axes(dmasscov_air)
-        @inbounds for ij in ijrange
-            dvg = Stencils.div_form(vsph2, ij) # does not divide by Ai
-            @vec for k in krange
-                dmasscov_air[k, ij] = -dvg(flux_air, k)
-                dmasscov_consvar[k, ij] = -dvg(flux_consvar, k)
-            end
-        end
-    end
+    # Reuse the centered air flux for both continuity equations.
+    centered_flux!(flux_air, model.mgr, metric_mass, ucov)
+    centered_tracer_flux!(flux_consvar, model.mgr, flux_air, consvar)
+    minus_divergence!(dmasscov_air, model.mgr, flux_air)
+    minus_div_centered_flux!(dmasscov_consvar, model.mgr, consvar, flux_air)
 
     return dmasscov_air, dmasscov_consvar, flux_air, flux_consvar
 end
