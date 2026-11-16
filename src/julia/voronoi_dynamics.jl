@@ -5,7 +5,6 @@ using ManagedLoops: @with, @vec
 using MutatingOrNot: Void, void, similar!
 using CFDomains.ZeroArrays: zero_array
 using CFDomains.LazyOperators: setminus!
-using CFDomains.LazyExpressions: @lazy
 using CFDomains: transpose!
 import VoronoiSpheres.Operators as Ops
 using VoronoiSpheres: Stencils
@@ -159,7 +158,8 @@ function mass_budget!(
     centered_tracer_flux! = Ops.CenteredTracerFlux(vsphere)
     minus_divergence! = Ops.Divergence(vsphere, setminus!)
     minus_div_centered_flux! = Ops.DivCenteredFlux(vsphere, setminus!)
-    @lazy metric_mass(mass_air; metric) = metric * mass_air
+    metric_mass = similar(mass_air)
+    @. metric_mass = metric * mass_air
 
     # Reuse the centered air flux for both continuity equations.
     centered_flux!(flux_air, model.mgr, metric_mass, ucov)

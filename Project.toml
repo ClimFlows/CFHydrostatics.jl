@@ -17,12 +17,10 @@ VoronoiSpheres = "75509e46-8d8c-4f7e-9072-0d95c5edd9e4"
 
 [weakdeps]
 Adapt = "79e6a3ab-5dfb-504d-930d-738a2a938a0e"
-Enzyme = "7da242da-08ed-463a-9acd-ee780be4f1d9"
 SHTnsSpheres = "9e5c175a-5132-4517-85a1-2957ec255f89"
 
 [extensions]
 CFHydrostaticsAdaptExt = ["Adapt"]
-CFHydrostaticsEnzymeExt = ["Enzyme"]
 SHTnsSpheres_Ext = ["SHTnsSpheres"]
 
 [compat]
@@ -31,7 +29,6 @@ CFDomains = "0.5.3"
 CFTimeSchemes = "0.3.4"
 CFTransport = "0.1.10"
 ClimFluids = "0.1.2"
-Enzyme = "0.13"
 ManagedLoops = "0.1.13"
 MutatingOrNot = "0.1.3, 0.2"
 PackageExtensionCompat = "1"
