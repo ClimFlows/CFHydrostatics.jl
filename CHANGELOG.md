@@ -4,7 +4,11 @@
 
 ### Changed
 
-- Compute Voronoi HPE mass budgets with the existing Voronoi flux and divergence operators.
+- Compute Voronoi HPE mass budgets with the existing Voronoi flux and divergence operators. The metric-scaled air mass is materialized before the centered-flux operator, and reverse differentiation uses the composed operator adjoints without a custom mass-budget rule.
+
+### Tests
+
+- Compare CPU Enzyme and ForwardDiff directional derivatives for the mass budget and a three-step RK4 integration with reused scratch storage. Full GPU reverse differentiation through HPE dynamics remains to be validated.
 
 ## 0.5.4
 
