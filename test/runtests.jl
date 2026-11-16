@@ -4,6 +4,7 @@ using Preferences
 import HostCPUFeatures
 @assert load_preference("HostCPUFeatures", "allow_runtime_invalidation")
 @assert HostCPUFeatures.allow_eval
+import ForwardDiff
 
 # computing
 using SIMDMathFunctions, ThreadPinning
@@ -65,6 +66,7 @@ include("scaling.jl")
 include("harmonics.jl")
 include("voronoi_ops.jl")
 include("voronoi.jl")
+include("voronoi_adjoint.jl")
 
 voronoi()
 

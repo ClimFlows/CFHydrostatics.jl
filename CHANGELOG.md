@@ -1,5 +1,32 @@
 # Changelog
 
+## 0.5.5
+
+### Changed
+
+- Compute Voronoi HPE mass budgets with the existing Voronoi flux and divergence operators. The metric-scaled air mass is materialized before the centered-flux operator, and reverse differentiation uses the composed operator adjoints without a custom mass-budget rule.
+
+### Tests
+
+- Compare CPU Enzyme and ForwardDiff directional derivatives for the mass budget and a three-step RK4 integration with reused scratch storage. Full GPU reverse differentiation through HPE dynamics remains to be validated.
+
+## 0.5.4
+
+### Fixed
+
+- Restore the slow and fast tendencies for Voronoi IMEX schemes using
+  covariant mass fields.
+- Allocate the Voronoi wind diagnostic using the current state layout.
+
+- Allocate dual-cell potential vorticity scratch with the state element type.
+  This allows forward-mode differentiation of the Voronoi dynamics with fixed
+  mesh and model parameters.
+
+### Tests
+
+- Check Enzyme reverse derivatives against ForwardDiff for Voronoi tendencies,
+  RK4 steps and vertical remapping.
+
 ## 0.5.3
 
 ### Changed

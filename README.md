@@ -21,3 +21,4 @@ Dynamics and diagnostics share the model's sphere. Its SHTns plans for
 surface, layer, and interface fields are reused across diagnostic sessions.
 See the [SpectralHPE example](https://github.com/ClimFlows/ClimFlowsExamples/tree/main/SpectralHPE.jl)
 for a complete model setup.
+

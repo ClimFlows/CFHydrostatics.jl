@@ -49,7 +49,7 @@ function bench(fun!, mgrs, args...)
 end
 
 function voronoi()
-    choices = (gpu_blocks=(0, 32),
+    choices = (gpu_blocks=(2, 4),
                precision=Float32,
                nz=(32, 96),
                # numerics
@@ -88,8 +88,9 @@ function voronoi()
     if oneAPI_functional
         @info "Functional oneAPI GPU detected !"
         oneAPI.versioninfo()
-        gpu0 = LoopManagers.KernelAbstractions_GPU(oneAPIBackend(), (0, 0))
-        gpu = LoopManagers.KernelAbstractions_GPU(oneAPIBackend(), choices.gpu_blocks)
+        gpu0 = LoopManagers.KernelAbstractions_GPU(oneAPIBackend())
+        gpu = LoopManagers.KernelAbstractions_GPU(oneAPIBackend(),
+                                                   LoopManagers.GPUConfig(choices.gpu_blocks...))
         mgrs = (mgrs..., gpu0, gpu)
         mgr_names = ["CPU", "SIMD", "GPU", "GPU(blocked)"]
     end
@@ -97,8 +98,9 @@ function voronoi()
     if CUDA_functional
         @info "Functional CUDA GPU detected !"
         CUDA.versioninfo()
-        gpu0 = LoopManagers.KernelAbstractions_GPU(CUDABackend(), (0, 0))
-        gpu = LoopManagers.KernelAbstractions_GPU(CUDABackend(), choices.gpu_blocks)
+        gpu0 = LoopManagers.KernelAbstractions_GPU(CUDABackend())
+        gpu = LoopManagers.KernelAbstractions_GPU(CUDABackend(),
+                                                   LoopManagers.GPUConfig(choices.gpu_blocks...))
         mgrs = (mgrs..., gpu0, gpu)
         mgr_names = ["CPU", "SIMD", "GPU", "GPU(blocked)"]
     end
